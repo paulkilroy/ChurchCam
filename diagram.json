@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "author": "Paul Kilroy",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": -117.65, "left": -182.06, "attrs": {} },
+    { "type": "board-ssd1306", "id": "oled1", "top": 50, "left": 20.23, "attrs": {} },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pan",
+      "top": -150,
+      "left": -350,
+      "attrs": { "value": "510" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "tilt",
+      "top": -150,
+      "left": -275,
+      "attrs": { "value": "510" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "zoom",
+      "top": -150,
+      "left": -425,
+      "attrs": { "value": "510" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+    [ "oled1:SDA", "esp:D21", "green", [ "v0" ] ],
+    [ "oled1:SCL", "esp:D22", "yellow", [ "v0" ] ],
+    [ "oled1:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "oled1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "zoom:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "tilt:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "pan:GND", "esp:GND.2", "black", [ "v0" ] ],
+    [ "zoom:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "tilt:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "pan:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "zoom:SIG", "esp:D32", "blue", [ "v0" ] ],
+    [ "tilt:SIG", "esp:D34", "yellow", [ "v0" ] ],
+    [ "pan:SIG", "esp:D35", "green", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}
