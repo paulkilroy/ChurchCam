@@ -1,16 +1,22 @@
 # Python program to
 # demonstrate readline()
 
+import re
+import os
 
-files = [ "config.html", "bootstrap.bundle.min.js", "bootstrap.min.css", "headers.css", "validate-forms.js" ]
-outputFile = open('Files.ino', 'w')
 
+# iles = [ "html/config.html", "html/restart.html", "html/bootstrap.bundle.min.js", "html/bootstrap.min.css", "html/headers.css", "html/validate-forms.js" ]
+files = [ "html/config.html",  "html/bootstrap.bundle.min.js", "html/bootstrap.min.css", "html/headers.css", "html/validate-forms.js" ]
+outputFile = open('src/WebFiles.cpp', 'w')
+
+outputFile.write(f'#include <pgmspace.h>\n')
 
 for f in files: 
 	inputFile = open(f, 'r')
-	f = f.replace(".", "_")
-	f = f.replace("-", "_")
-	outputFile.write(f'const char {f} PROGMEM[] = \n')
+	fn = os.path.basename(inputFile.name)
+	fn = fn.replace(".", "_")
+	fn = fn.replace("-", "_")
+	outputFile.write(f'extern const char {fn} PROGMEM[] = \n')
 
 	skipJSON = False
 	while True:
@@ -24,11 +30,19 @@ for f in files:
 		line = line.strip()
 		line = line.replace("\\", "\\\\")
 		line = line.replace("\"", "\\\"")
-		if( f == 'config_html' ):
+		if( fn == 'config_html' or fn == 'restart.html' ):
 			line = line.replace("%", "%%")
+			# re.sub(r'(.*)-abc(\.jpg)$', '\g<1>\g<2>', string)
+			# Undo the replace we just did it its surrounding a variable name
+			# There is probably a better way to do this
+			line = re.sub(r'%%(\w+)%%',r'%\1%',line)
+
+			#line = line.replace("<!-- SERVER_VARS -->", "%SERVER_VARS%")
+
 
 		if line == "];":
 			skipJSON = False
+			#continue
 
 		if skipJSON:
 			continue
@@ -37,13 +51,25 @@ for f in files:
 		if line.startswith("//"):
 			continue
 
-		if line == "ATEMCameras = [":
-			line = "ATEMCameras = [ %ATEMCameras%"
+		if line == "Networks = [":
+			line = "Networks = [\\n%Networks%"
 			skipJSON = True
+			#continue
+		
+		if line == "ATEMSwitcher = [":
+			line = "ATEMSwitcher = [\\n%ATEMSwitcher%"
+			skipJSON = True
+			#continue
+
+		if line == "ATEMCameras = [":
+			line = "ATEMCameras = [\\n%ATEMCameras%"
+			skipJSON = True
+			#continue
 
 		if line == "DiscoveredCameras = [":
 			line = "DiscoveredCameras = [ %DiscoveredCameras%"
 			skipJSON = True
+			#continue
 
 		outputFile.write("\"" + line + "\\n\"\n");
 

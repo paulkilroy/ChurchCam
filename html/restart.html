@@ -1,0 +1,69 @@
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        h1 {
+            font-family: "Roboto", Arial, Helvetica, sans-serif;
+            font-weight: 400;
+            margin-left: 1em
+        }
+        .loader {
+            border: 16px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 16px solid #0D6EFD;
+            width: 40px;
+            height: 40px;
+            -webkit-animation: spin 2s linear infinite;
+            animation: spin 2s linear infinite;
+        }
+
+        @-webkit-keyframes spin {
+            0% {
+                -webkit-transform: rotate(0deg);
+            }
+
+            100% {
+                -webkit-transform: rotate(360deg);
+            }
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+    <script>
+        if (location.protocol != "file:") {
+            keepPinging = true;
+            var http = new XMLHttpRequest();
+            http.addEventListener('load', (event) => { keepPinging = false;clearInterval(callback); console.log('got it'); window.location.href = '/?success=%RESTART_MSG%'; });
+            http.addEventListener('error', (event) => { console.log('still waiting'); });
+            callback = setInterval(function () {
+                if( keepPinging ) {
+                    http.open('GET', '/ping');
+                    http.send();
+                }
+            }, 1000);
+        }
+    </script>
+</head>
+
+<body>
+    <table>
+        <tr>
+            <td>
+                <div class='loader'></div>
+            </td>
+            <td>
+                <h1>%RESTART_MSG%</h1>
+                <h1>Waiting for restart...</h1>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

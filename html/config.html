@@ -17,18 +17,48 @@
   <title>PTZ Status and Config</title>
 
   <!-- Bootstrap core CSS -->
-  <link href="bootstrap.min.css" rel="stylesheet">
-
+  <link defer href="bootstrap.min.css" rel="stylesheet">
   <!-- Custom styles for this template -->
-  <link href="headers.css" rel="stylesheet">
-  <script src="bootstrap.bundle.min.js"></script>
-  <script async src="validate-forms.js"></script>
+  <link defer href="headers.css" rel="stylesheet">
+  <!-- https://stackoverflow.com/questions/55493629/rectangular-shape-behind-text-in-css -->
+  <style>
+    .nodisplay { display:none;}
+    #joystickContainer {
+      text-align: center;
+    }
+
+    /*
+    #joystickDeadZone {
+    }
+    */
+
+    #joystickDeadZone:before {
+      margin-top: -1em;
+      content: '';
+      position: absolute;
+      width: calc(100%*.2);
+      height: 2em;
+      margin: auto;
+      z-index: 1;
+      border: 5px solid lightgray;
+      left: calc((100% / 2 - 0px) - (100% * .2 / 2 - 0px));
+    }
+  </style>
+  <script defer src="bootstrap.bundle.min.js"></script>
+  <script defer src="validate-forms.js"></script>
+  <!-- Needed for Firmware upload -- assuming you've got interenet to fetch this -->
+  <script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script>
   <script>
-    // name pulled from ATEM
-    // IPAddress cameraIP[NUM_CAMERAS + 1];
-    // uint8_t cameraProtocol[NUM_CAMERAS + 1];
-    // uint16_t cameraPort[NUM_CAMERAS + 1];
-    // uint8_t cameraHeaders[NUM_CAMERAS + 1];
+    LogCallback = null;
+    ptzSocket = null;
+    Networks = [
+      { "name": "Ethernet", "status": "off", "ip": "10.0.4.40", "ssid": "-", "info": "tbd" },
+      { "name": "WiFi", "status": "up", "ip": "10.0.4.40", "ssid": "KilroyNetwork", "info": "tbd" },
+      { "name": "Hotspot", "status": "down", "ip": "10.0.4.40", "ssid": "ptz-config", "info": "tbd" },
+    ];
+    ATEMSwitcher = [
+      { "status": "down", "name": "ATEM Mini Pro", "ip": "10.0.4.40", "port": "-", "protocol": "1" },
+    ];
     ATEMCameras = [
       { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "protocol": "1", "headers": "0" },
       { "id": "1", "status": "up", "name": "Camera 2", "ip": "10.0.4.62", "port": "60578", "protocol": "0", "headers": "1" },
@@ -36,48 +66,157 @@
       { "id": "3", "status": "off", "name": "AV PC", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" },
       { "id": "4", "status": "off", "name": "Cam5", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" },
       { "id": "5", "status": "off", "name": "Cam6", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" },
-      { "id": "6", "status": "up", "name": "Tracker", "ip": "10.0.4.171", "port": "5678", "protocol": "1", "headers": "0" },
+      { "id": "6", "status": "up", "name": "Tracker", "ip": "10.0.4.171", "port": "5678", "protocol": "2", "headers": "0" },
       { "id": "7", "status": "off", "name": "Cam8", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" }
     ];
     DiscoveredCameras = [
-      { "name": "HD Camera", "ip": "10.0.4.40", "port": "1234", "protocol": "0", "headers": "1" },
-      { "name": "HD Camera30x", "ip": "10.0.4.62", "port": "3456", "protocol": "0", "headers": "1" }
+      { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "protocol": "0", "headers": "1" },
+      { "name": "HD Camera30x", "ip": "10.0.4.62", "port": "60578", "protocol": "0", "headers": "1" }
     ];
 
+    function updateNetworks() {
+      let template = document.getElementById("networkStatus");
+      for (let i = 0; i < Networks.length; i++) {
+        let cls = "alert align-items-center alert-success";
+        let icn = "#check-circle-fill";
+        if (Networks[i].status == "down") {
+          cls = "alert align-items-center alert-danger";
+          icn = "#exclamation-triangle-fill";
+        } else if (Networks[i].status == "off") {
+          cls = "alert align-items-center alert-dark";
+          icn = "#exclamation-triangle-fill";
+        }
+
+        let clone = template.cloneNode(true);
+        clone.id = "networkStatus" + Networks[i].name;
+        template.parentNode.appendChild(clone);
+        let clss = document.querySelectorAll("#" + clone.id + "  #networkStatusClass")[0];
+        clss.id = "networkStatusClass" + Networks[i].name;
+        clss.className = cls;
+        let icon = document.querySelectorAll("#" + clone.id + " #networkStatusIcon")[0];
+        icon.id = "networkStatusIcon" + Networks[i].name;
+        icon.setAttribute('href', icn);
+        let name = document.querySelectorAll("#" + clone.id + "  #networkStatusName")[0];
+        name.id = "networkStatusName" + Networks[i].name;
+        name.innerHTML = Networks[i].name;
+        let ip = document.querySelectorAll("#" + clone.id + "  #networkStatusIP")[0];
+        ip.id = "networkStatusIP" + Networks[i].name;
+        ip.innerHTML = Networks[i].ip;
+        let ssid = document.querySelectorAll("#" + clone.id + "  #networkStatusSSID")[0];
+        ssid.id = "networkStatusSSID" + Networks[i].ssid;
+        ssid.innerHTML = Networks[i].ssid;
+        let info = document.querySelectorAll("#" + clone.id + "  #networkStatusInfo")[0];
+        info.id = "networkStatusInfo" + Networks[i].name;
+        info.innerHTML = Networks[i].info;
+      }
+      template.remove();
+    }
+    function updateSwitcherStatus() {
+      let cls = "alert align-items-center alert-success";
+      let icon = "#check-circle-fill";
+      if (ATEMSwitcher[0].status == "down") {
+        cls = "alert align-items-center alert-danger";
+        icon = "#exclamation-triangle-fill";
+      } else if (ATEMSwitcher[0].status == "off") {
+        cls = "alert align-items-center alert-warning";
+        icon = "#exclamation-triangle-fill";
+      } else if (ATEMSwitcher[0].status == "na") {
+        cls = "alert align-items-center alert-dark";
+        icon = "#dash-circle-fill";
+      }
+      let protocol = "UDP";
+      if (ATEMSwitcher[0].protocol == "1") {
+        protocol = "TCP";
+      }
+      document.getElementById("atemSwitcherClass").className = cls;
+      document.getElementById("atemSwitcherIcon").setAttribute('href', icon);
+      document.getElementById("atemSwitcherName").innerHTML = ATEMSwitcher[0].name;
+      document.getElementById("atemSwitcherProtocol").innerHTML = protocol;
+      document.getElementById("atemSwitcherIP").innerHTML = ATEMSwitcher[0].ip;
+      document.getElementById("atemSwitcherPort").innerHTML = ATEMSwitcher[0].port;
+    }
+
     function updateCameraStatus() {
+      let template = document.getElementById("camStatus");
+
       for (let i = 0; i < ATEMCameras.length; i++) {
-        cls = "alert align-items-center alert-success";
-        icon = "#check-circle-fill";
-        protocol = "UDP";
+        let cls = "alert align-items-center alert-success";
+        let icon = "#check-circle-fill";
         if (ATEMCameras[i].status == "down") {
           cls = "alert align-items-center alert-danger";
           icon = "#exclamation-triangle-fill";
         } else if (ATEMCameras[i].status == "off") {
-          //cls = "alert align-items-center alert-warning";
-          cls = "alert align-items-center alert-dark";
+          cls = "alert align-items-center alert-warning";
           icon = "#exclamation-triangle-fill";
+        } else if (ATEMCameras[i].status == "na") {
+          cls = "alert align-items-center alert-dark";
+          icon = "#dash-circle-fill";
         }
+        let protocol = "UDP";
         if (ATEMCameras[i].protocol == "1") {
           protocol = "TCP";
         }
-        document.getElementById("camStatusClass" + (i + 1)).className = cls;
-        document.getElementById("camStatusIcon" + (i + 1)).setAttribute('href', icon);
-        document.getElementById("camStatusName" + (i + 1)).innerHTML = ATEMCameras[i].name;
-        document.getElementById("camStatusProtocol" + (i + 1)).innerHTML = protocol;
-        document.getElementById("camStatusIP" + (i + 1)).innerHTML = ATEMCameras[i].ip;
-        document.getElementById("camStatusPort" + (i + 1)).innerHTML = ATEMCameras[i].port;
+
+        clone = template.cloneNode(true);
+        clone.id = "camStatus" + i;
+        template.parentNode.appendChild(clone);
+        document.querySelectorAll("#" + clone.id + "  #camStatusClass")[0].id = "camStatusClass" + i;
+        document.querySelectorAll("#" + clone.id + " #camStatusIcon")[0].id = "camStatusIcon" + i;
+        document.querySelectorAll("#" + clone.id + "  #camStatusName")[0].id = "camStatusName" + i;
+        document.querySelectorAll("#" + clone.id + " #camStatusProtocol")[0].id = "camStatusProtocol" + i;
+        document.querySelectorAll("#" + clone.id + "  #camStatusIP")[0].id = "camStatusIP" + i;
+        document.querySelectorAll("#" + clone.id + "  #camStatusPort")[0].id = "camStatusPort" + i;
+
+        document.getElementById("camStatusClass" + i).className = cls;
+        document.getElementById("camStatusIcon" + i).setAttribute('href', icon);
+        document.getElementById("camStatusName" + i).innerHTML = ATEMCameras[i].name;
+        document.getElementById("camStatusProtocol" + i).innerHTML = protocol;
+        document.getElementById("camStatusIP" + i).innerHTML = ATEMCameras[i].ip;
+        document.getElementById("camStatusPort" + i).innerHTML = ATEMCameras[i].port;
       }
+
+      template.remove();
     }
+
+    function updateCameraConfig() {
+      document.getElementById("atemConfigName").innerHTML = ATEMSwitcher[0].name;
+      document.getElementById("atemConfigIP").value = ATEMSwitcher[0].ip;
+
+      let template = document.getElementById("camConfig");
+      for (let i = 0; i < ATEMCameras.length; i++) {
+        let clone = template.cloneNode(true);
+        clone.id = "camConfig" + i;
+        template.parentNode.appendChild(clone);
+        document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].name = "camConfigToggle" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].name = "camConfigName" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigProtocol")[0].name = "camConfigProtocol" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].name = "camConfigIP" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].name = "camConfigPort" + i;
+
+        document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].id = "camConfigToggle" + i;
+        // TODO do I need to call the toggle javascript?
+        document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].id = "camConfigName" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigProtocol")[0].id = "camConfigProtocol" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].id = "camConfigIP" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].id = "camConfigPort" + i;
+
+        document.getElementById("camConfigName" + i).innerHTML = ATEMCameras[i].name;
+        document.getElementById("camConfigProtocol" + i).value = ATEMCameras[i].protocol;
+        document.getElementById("camConfigIP" + i).value = ATEMCameras[i].ip;
+        document.getElementById("camConfigPort" + i).value = ATEMCameras[i].port;
+      }
+      template.remove();
+    }
+
     function assignDiscoveredCameras() {
       for (let i = 0; i < DiscoveredCameras.length; i++) {
-        let atemCamNum = document.getElementById("dcAtemCam" + i).value;
-        if (atemCamNum != "") {
+        let a = document.getElementById("dcAtemCam" + i).value;
+        if (a != "") {
           //console.log("discovered camera: " + i + " selected atem cam: " + atemCamNum);
-          //console.log("cam" + atemCamNum + "Protocol");
-          document.getElementById("cam" + atemCamNum + "Protocol").value = DiscoveredCameras[i].protocol;
-          document.getElementById("cam" + atemCamNum + "IP").value = DiscoveredCameras[i].ip;
-          document.getElementById("cam" + atemCamNum + "Port").value = DiscoveredCameras[i].port;
-          document.getElementById("cam" + atemCamNum + "Headers").value = DiscoveredCameras[i].headers;
+          document.getElementById("camConfigProtocol" + a).value = DiscoveredCameras[i].protocol;
+          document.getElementById("camConfigIP" + a).value = DiscoveredCameras[i].ip;
+          document.getElementById("camConfigPort" + a).value = DiscoveredCameras[i].port;
+          //document.getElementById("camConfigHeaders" + a).value = DiscoveredCameras[i].headers;
         }
       }
     }
@@ -107,13 +246,12 @@
         dcSelect.appendChild(dcOption0);
         dcOption0.innerHTML = "Unassigned";
         dcOption0.value = "";
-        //for (let a = 0; a < ATEMCameras.length; a++) {
-        for (let a = 0; a < 3; a++) {
+        for (let a = 0; a < ATEMCameras.length; a++) {
           let dcOption = document.createElement("option");
           dcSelect.appendChild(dcOption);
-          dcOption.value = a + 1;
+          dcOption.value = a;
           dcOption.innerHTML = ATEMCameras[a].name;
-          if (DiscoveredCameras[i].ip == document.getElementById("cam" + (a + 1) + "IP").value) {
+          if (DiscoveredCameras[i].ip == document.getElementById("camConfigIP" + a).value) {
             dcOption.selected = true;
           }
         }
@@ -121,6 +259,22 @@
       let dc = document.getElementById("discoveredCameras");
       dc.parentNode.replaceChild(div, dc);
     }
+
+    async function discoverCameras(btn) {
+      btn.disabled = true;
+      btn.innerHTML =
+        "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Discovering Cameras...";
+      if (location.protocol != "file:") {
+        const response = await fetch('/discoverCameras');
+        DiscoveredCameras = await response.json();
+        console.log(DiscoveredCameras);
+      }
+      $('#discoverModal').modal('show');
+      drawDiscoveredCameras();
+      btn.disabled = false;
+      btn.innerHTML = "Discover Cameras";
+    }
+
     function collapseDisable(c) {
       for (let i = 1; i < 5; i++) {
         if (c == i) {
@@ -129,11 +283,98 @@
           document.getElementById("btnradio" + i).setAttribute('data-bs-toggle', 'collapse');
         }
       }
+      // Enable log fetching if you click logs
+      if (c == 3 && location.protocol != "file:") {
+        LogCallback = setInterval(function () {
+          // Call a function repetatively with .2 Second interval
+          getLogData();
+        }, 200); //2000mSeconds update rate
+      } else if (LogCallback && c != 3 && location.protocol != "file:") {
+        clearInterval(LogCallback);
+      }
+      if (c == 4) {
+        setupPTZSocket();
+      } else {
+        closePTZSocket();
+      }
+    }
+    function closePTZSocket() {
+      if (ptzSocket) ptzSocket.close();
+    }
+    function setupPTZSocket() {
+      if (location.protocol != "file:") {
+        console.log("connecting to ws://" + location.hostname + ":3000");
+        ptzSocket = new WebSocket("ws://" + location.hostname + ":3000");
+
+        ptzSocket.onopen = function (e) {
+          console.log("[open] Connection established");
+        };
+
+        ptzSocket.onmessage = function (event) {
+          console.log(`[message] Data received from server: ${event.data}`);
+          let ptz = JSON.parse(event.data);
+          document.getElementById("axisPan").value = ptz.pan;
+          document.getElementById("panValue").innerHTML = ptz.pan;
+          document.getElementById("panVisca").innerHTML = ptz.viscaPan;
+          document.getElementById("axisTilt").value = ptz.tilt;
+          document.getElementById("tiltValue").innerHTML = ptz.tilt;
+          document.getElementById("tiltVisca").innerHTML = ptz.viscaTilt;
+          document.getElementById("axisZoom").value = ptz.zoom;
+          document.getElementById("zoomValue").innerHTML = ptz.zoom;
+          document.getElementById("zoomVisca").innerHTML = ptz.viscaZoom;
+        };
+
+        ptzSocket.onclose = function (event) {
+          if (event.wasClean) {
+            console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+          } else {
+            // e.g. server process killed or network down
+            // event.code is usually 1006 in this case
+            console.log('[close] Connection died');
+          }
+        };
+
+        ptzSocket.onerror = function (error) {
+          console.log(`[error]`);
+        };
+      }
+    }
+
+    function toggleStaticIP(e) {
+      document.getElementById("staticIPAddr").disabled = !e.checked;
+      document.getElementById("staticSubnetMask").disabled = !e.checked;
+      document.getElementById("staticGateway").disabled = !e.checked;
+    }
+
+    function toggleCam(e) {
+      var camNum = e.id.replace(/^\D+/g, '');
+      document.getElementById("camConfigProtocol" + camNum).disabled = !e.checked;
+      document.getElementById("camConfigIP" + camNum).disabled = !e.checked;
+      document.getElementById("camConfigPort" + camNum).disabled = !e.checked;
+    }
+
+    function getLogData() {
+      var xhttp = new XMLHttpRequest();
+
+      xhttp.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+          let ld = document.getElementById("logData");
+          if (ld) ld.innerHTML = this.responseText;
+        }
+      };
+      xhttp.open("GET", "logData", true);
+      xhttp.send();
+    }
+
+    function updateFilename() {
+      let fileInput = document.getElementById("update");
+      let fileButton = document.getElementById("fileName");
+      fileButton.value = fileInput.value.replace(/^.*[\\\/]/, '');
     }
   </script>
 </head>
 
-<body onload="javascript:updateCameraStatus()">
+<body class="nodisplay">
   <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
     <symbol id="bootstrap" viewBox="0 0 118 94">
       <title>Bootstrap</title>
@@ -182,18 +423,21 @@
       <path
         d="M0 9.665v1.717a1 1 0 0 0 .553.894l6.553 3.277a2 2 0 0 0 1.788 0l6.553-3.277a1 1 0 0 0 .553-.894V9.665c0-.1-.06-.19-.152-.23L9.5 6.715v.993l5.227 2.178a.125.125 0 0 1 .001.23l-5.94 2.546a2 2 0 0 1-1.576 0l-5.94-2.546a.125.125 0 0 1 .001-.23L6.5 7.708l-.013-.988L.152 9.435a.25.25 0 0 0-.152.23z" />
     </symbol>
+    <symbol id="dash-circle-fill" fill="currentColor" class="bi bi-dash-circle-fill" viewBox="0 0 16 16">
+      <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM4.5 7.5a.5.5 0 0 0 0 1h7a.5.5 0 0 0 0-1h-7z" />
+    </symbol>
   </svg>
   <main>
     <div class="container">
       <header class="py-4">
         <a href="#" class="align-items-center text-dark text-decoration-none">
           <div class="row">
-            <div class="col-1">
+            <div class="col-auto my-0">
               <svg class="row bi" width="60" height="60">
                 <use xlink:href="#joystick" />
               </svg>
             </div>
-            <div class="col-11">
+            <div class="col-9 my-0">
               <span class="row fs-2">Church Cam Controller</span>
               <span class="row fs-6"><i>PTZ made EZ</i></span>
             </div>
@@ -201,22 +445,25 @@
         </a>
         <hr class="py-0 my-0" />
       </header>
+      <div id="smsgBox" class="alert alert-success" role="alert" style="display: none;">
+      </div>
     </div>
+
     <div class="container">
       <header class="d-flex justify-content-center py-3">
         <div class="btn-group-lg" role="group">
           <input type="radio" class="btn-check" data-bs-toggle="collapse" data-bs-target="#collapseStatus"
             name="btnradio" id="btnradio1" autocomplete="off" onclick="collapseDisable(1)" checked>
-          <label class="btn btn-outline-primary" for="btnradio1">Status</label>
+          <label class="btn btn-outline-primary px-2" for="btnradio1">Status</label>
           <input type="radio" class="btn-check" data-bs-toggle="collapse" data-bs-target="#collapseConfig"
             name="btnradio" id="btnradio2" autocomplete="off" onclick="collapseDisable(2)">
-          <label class="btn btn-outline-primary" for="btnradio2">Config</label>
+          <label class="btn btn-outline-primary px-2" for="btnradio2">Config</label>
           <input type="radio" class="btn-check" data-bs-toggle="collapse" data-bs-target="#collapseLogs" name="btnradio"
             id="btnradio3" autocomplete="off" onclick="collapseDisable(3)">
-          <label class="btn btn-outline-primary" for="btnradio3">Logs</label>
+          <label class="btn btn-outline-primary px-2" for="btnradio3">Logs</label>
           <input type="radio" class="btn-check" data-bs-toggle="collapse" data-bs-target="#collapseFirmware"
             name="btnradio" id="btnradio4" autocomplete="off" onclick="collapseDisable(4)">
-          <label class="btn btn-outline-primary" for="btnradio4">Firmware</label>
+          <label class="btn btn-outline-primary px-2" for="btnradio4">Firmware</label>
         </div>
       </header>
     </div>
@@ -235,49 +482,29 @@
       <div class="accordion-item">
         <div id="collapseStatus" class="accordion-collapse collapse show" data-bs-parent="#accordionExample">
           <div class="accordion-body">
-            <div class="col-md-8 mx-auto">
+            <div class="col-lg-10 mx-auto">
               <table class="table">
                 <thead class="bg-dark text-light">
                   <tr>
                     <th scope="col">Network</th>
-                    <th scope="col">State</th>
                     <th scope="col">IP</th>
+                    <th scope="col">SSID</th>
                     <th scope="col">Info</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <th class="alert alert-success align-items-center" scope="row">
+                  <tr id="networkStatus">
+                    <th id="networkStatusClass" class="alert alert-success align-items-center" scope="row">
                       <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use xlink:href="#check-circle-fill" />
+                        <use id="networkStatusIcon" xlink:href="#check-circle-fill" />
                       </svg>
-                      Ethernet
+                      <span id="networkStatusName">
+                        Template
+                      </span>
                     </th>
-                    <td>UP</td>
-                    <td>10.0.4.10</td>
-                    <td>-</td>
-                  </tr>
-                  <tr>
-                    <th class="alert alert-danger align-items-center" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      WiFi Client
-                    </th>
-                    <td>UP</td>
-                    <td>10.0.4.10</td>
-                    <td>-</td>
-                  </tr>
-                  <tr>
-                    <th class="alert alert-warning align-items-center" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      WiFi AP
-                    </th>
-                    <td>OFF</td>
-                    <td>10.0.4.10</td>
-                    <td>-</td>
+                    <td id="networkStatusIP">10.0.4.10</td>
+                    <td id="networkStatusSSID">-</td>
+                    <td id="networkStatusInfo">-</td>
                   </tr>
                 </tbody>
               </table>
@@ -285,7 +512,7 @@
 
             <div class="divider py-3"></div>
 
-            <div class="col-md-8 mx-auto">
+            <div class="col-lg-10 mx-auto">
               <table class="table">
                 <thead class="bg-primary text-light">
                   <tr>
@@ -296,152 +523,59 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr>
-                    <th class="alert alert-success align-items-center" scope="row">
+                  <tr id="atemSwitcher">
+                    <th id="atemSwitcherClass" class="alert alert-success align-items-center" scope="row">
                       <div class="container-full">
                         <div class="row">
                           <svg class="col-auto align-center bi flex-shrink-0" width="24" height="24" role="img">
-                            <use xlink:href="#check-circle-fill" />
+                            <use id="atemSwitcherIcon" xlink:href="#check-circle-fill" />
                           </svg>
-                          <div class="col-auto px-0">
+                          <div id="atemSwitcherName" class="col-auto px-0">
                             ATEM
                           </div>
-                          <div class="col fs-6 fw-light fst-italic">Mini Extreme</div>
+                          <div id="atemSwitcherName2" class="col fs-6 fw-light fst-italic">-</div>
                         </div>
                       </div>
                     </th>
-                    <td>10.0.4.10</td>
-                    <td>TCP</td>
-                    <td>1234</td>
+                    <td id="atemSwitcherIP">10.0.4.10</td>
+                    <td id="atemSwitcherProtocol">TCP</td>
+                    <td id="atemSwitcherPort">1234</td>
                   </tr>
                   <!-- Options
 1- generate all html from JS array - could help redraw if needed
 2- hardcode html and update all data from JS
 3- hardcode html and just update html status icons and color/class
+4-*** Hardcode ONE html and copy it for the others - maybe a dummy table row
 -->
-                  <tr>
-                    <th id="camStatusClass1" class="alert align-items-center alert-dark" scope="row">
+                  <tr id="camStatus">
+                    <th id="camStatusClass" class="alert align-items-center alert-dark" scope="row">
                       <div class="container-full">
                         <div class="row">
                           <svg class="col-auto align-center bi flex-shrink-0" width="24" height="24" role="img">
-                            <use id="camStatusIcon1" xlink:href="#exclamation-triangle-fill" />
+                            <use id="camStatusIcon" xlink:href="#exclamation-triangle-fill" />
                           </svg>
-                          <div id="camStatusName1" class="col-auto px-0">
+                          <div id="camStatusName" class="col-auto px-0">
                             Cam1
                           </div>
-                          <div class="col fs-6 fw-light fst-italic">cam1.dns.name</div>
+                          <div id="camStatusHost" class="col fs-6 fw-light fst-italic">-</div>
                         </div>
                       </div>
                     </th>
-                    <td id="camStatusIP1"></td>
-                    <td id="camStatusProtocol1"></td>
-                    <td id="camStatusPort1"></td>
-                  </tr>
-                  <tr>
-                    <th id="camStatusClass2" class="alert align-items-center alert-dark" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use id="camStatusIcon2" xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      <span id="camStatusName2" class="col-auto align-center px-0">
-                        Cam2
-                      </span>
-                    </th>
-                    <td id="camStatusIP2"></td>
-                    <td id="camStatusProtocol2"></td>
-                    <td id="camStatusPort2"></td>
-                  </tr>
-                  <tr>
-                    <th id="camStatusClass3" class="alert align-items-center alert-dark" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use id="camStatusIcon3" xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      <span id="camStatusName3" class="col-auto align-center px-0">
-                        Cam3
-                      </span>
-                    </th>
-                    <td id="camStatusIP3"></td>
-                    <td id="camStatusProtocol3"></td>
-                    <td id="camStatusPort3"></td>
-                  </tr>
-                  <tr>
-                    <th id="camStatusClass4" class="alert alert-dark align-items-center" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use id="camStatusIcon4" xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      <span id="camStatusName4" class="col-auto align-center px-0">
-                        Cam4
-                      </span>
-                    </th>
-                    <td id="camStatusIP4"></td>
-                    <td id="camStatusProtocol4"></td>
-                    <td id="camStatusPort4"></td>
-                  </tr>
-                  <tr>
-                    <th id="camStatusClass5" class="alert align-items-center alert-dark" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use id="camStatusIcon5" xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      <span id="camStatusName5" class="col-auto align-center px-0">
-                        Cam5
-                      </span>
-                    </th>
-                    <td id="camStatusIP5"></td>
-                    <td id="camStatusProtocol5"></td>
-                    <td id="camStatusPort5"></td>
-                  </tr>
-                  <tr>
-                    <th id="camStatusClass6" class="alert alert-dark align-items-center" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use id="camStatusIcon6" xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      <span id="camStatusName6" class="col-auto align-center px-0">
-                        Cam6
-                      </span>
-                    </th>
-                    <td id="camStatusIP6"></td>
-                    <td id="camStatusProtocol6"></td>
-                    <td id="camStatusPort6"></td>
-                  </tr>
-                  <tr>
-                    <th id="camStatusClass7" class="alert alert-dark align-items-center" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use id="camStatusIcon7" xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      <span id="camStatusName7" class="col-auto align-center px-0">
-                        Cam7
-                      </span>
-                    </th>
-                    <td id="camStatusIP7"></td>
-                    <td id="camStatusProtocol7"></td>
-                    <td id="camStatusPort7"></td>
-                  </tr>
-                  <tr>
-                    <th id="camStatusClass8" class="alert alert-dark align-items-center" scope="row">
-                      <svg class="bi flex-shrink-0 me-2" width="24" height="24" role="img">
-                        <use id="camStatusIcon8" xlink:href="#exclamation-triangle-fill" />
-                      </svg>
-                      <span id="camStatusName8" class="col-auto align-center px-0">
-                        Cam8
-                      </span>
-                    </th>
-                    <td id="camStatusIP8"></td>
-                    <td id="camStatusProtocol8"></td>
-                    <td id="camStatusPort8"></td>
+                    <td id="camStatusIP"></td>
+                    <td id="camStatusProtocol"></td>
+                    <td id="camStatusPort"></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            joystick status? <br />
-            - mid set in config <br />
-            - poll joystick for mid and show jitter <br />
           </div>
         </div>
       </div>
+      <!-- Config Accordian -->
       <div class="accordion-item">
         <div id="collapseConfig" class="accordion-collapse collapse" data-bs-parent="#accordionExample">
-          <div class="accordion-body container">
-
-            <form class="row col mx-auto needs-validation" novalidate>
+          <div class="accordion-body container-full">
+            <form action="/save" method="POST" class="row col mx-auto needs-validation" novalidate>
               <ul class="nav nav-tabs">
                 <li class="nav-item">
                   <div class="nav-link active bg-primary text-light" style="border:0px" href="#">Network Config</div>
@@ -449,31 +583,43 @@
               </ul>
               <span class="border border-primary py-3">
                 <div class="form-floating">
-                  <input type="text" class="form-control" id="ptzName" placeholder="ptz" value="ptz" required>
-                  <label for="floatingInputValue">PTZ Name (http://xxx.local)</label>
-                  <div class="invalid-feedback">
-                    Please provide a valid hostame.
-                  </div>
+                  <input name="networkName" type="text" class="form-control" id="networkName" placeholder="ssid" value="%SSID%">
+                  <label for="networkName">Network Name (SSID)</label>
                 </div>
                 <div class="form-floating">
-                  <input type="text" class="form-control" id="networkName" placeholder="ssid" value="ssid">
-                  <label for="networkName">Network Name (SSIDl)</label>
-                </div>
-                <div class="form-floating">
-                  <input type="password" class="form-control" id="networkPassword" placeholder="password" value="">
+                  <input name="networkPassword" type="password" class="form-control" id="networkPassword" placeholder="password" value="%PSK%">
                   <label for="networkPassword">Network Password</label>
                 </div>
                 <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" role="switch" id="flexSwitchCheckDefault">
-                  <label class="form-check-label" for="flexSwitchCheckDefault">Static IP Address?</label>
+                  <input name="staticIPToggle" class="form-check-input" type="checkbox" role="switch" id="staticIPToggle"
+                    onclick="toggleStaticIP(this)" %STATIC_IP%>
+                  <label class="form-check-label" for="staticIPToggle">Static IP Address?</label>
                 </div>
                 <div class="form-floating">
-                  <input type="text" class="form-control" id="ptzIP" placeholder="0.0.0.0" value="" minlength="7"
-                    maxlength="15" size="15"
+                  <input name="staticIPAddr" type="text" class="form-control" id="staticIPAddr" placeholder="0.0.0.0"
+                    value="%STATIC_IP_ADDR%" minlength="7" maxlength="15" size="15"
                     pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
-                  <label for="networkPassword">PTZ IP</label>
+                  <label for="networkPassword">Static IP</label>
                   <div class="invalid-feedback">
-                    Please provide a ip address.
+                    Please provide a valie IP address.
+                  </div>
+                </div>
+                <div class="form-floating">
+                  <input name="staticSubnetMask" type="text" class="form-control" id="staticSubnetMask" placeholder="0.0.0.0"
+                    value="%STATIC_SUBNET_MASK%" minlength="7" maxlength="15" size="15"
+                    pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
+                  <label for="networkPassword">Static Subnet Mask</label>
+                  <div class="invalid-feedback">
+                    Please provide a valie IP address.
+                  </div>
+                </div>
+                <div class="form-floating">
+                  <input name="staticGateway" type="text" class="form-control" id="staticGateway" placeholder="0.0.0.0"
+                    value="%STATIC_GATEWAY%" minlength="7" maxlength="15" size="15"
+                    pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
+                  <label for="networkPassword">Static Gateway</label>
+                  <div class="invalid-feedback">
+                    Please provide a valie IP address.
                   </div>
                 </div>
               </span>
@@ -485,22 +631,18 @@
               </ul>
               <span class="border border-primary py-3">
                 <div class="input-group mb-3">
-                  <span class="input-group-text" id="basic-addon1">ATEM Mini Pro</span>
-                  <input type="text" class="form-control" id="atemIP" placeholder="0.0.0.0" value="" minlength="7"
-                    maxlength="15" size="15"
+                  <span id="atemConfigName" class="input-group-text" id="basic-addon1">ATEM Mini Pro</span>
+                  <input name="atemConfigIP" type="text" class="form-control" id="atemConfigIP" placeholder="0.0.0.0" value="%ATEM_IP_ADDR%"
+                    minlength="7" maxlength="15" size="15"
                     pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
                 </div>
 
-                <!--
-                <button type="button" class="btn btn-success py-2 my-2 col-12"
-                  onclick="updateCameraStatus()">TEST</button>
-                -->
-
                 <!-- Button trigger modal -->
-                <button type="button" class="btn btn-success py-2 my-2 col-12" data-bs-toggle="modal"
-                  data-bs-target="#exampleModal" onclick="drawDiscoveredCameras()">Discover Cameras</button>
+                <button id="discoverCamerasButton" type="button" class="btn btn-success py-2 my-2 col-12"
+                  xdata-bs-toggle="modal" data-bs-target="#discoverModalX" onclick="discoverCameras(this)">Discover
+                  Cameras</button>
                 <!-- Modal -->
-                <div class="modal fade" id="exampleModal" tabindex="-1">
+                <div class="modal fade" id="discoverModal" tabindex="-1">
                   <div class="modal-dialog">
                     <div class="modal-content">
                       <div class="modal-header">
@@ -519,79 +661,34 @@
                   </div>
                 </div>
 
-                <!-- 
-                  Break the line on small screen into 
-                  <name><proto>
-                  <ip><port>
-                    -- Change proto to be: 
-                        Visca TCP (no headers)
-                        Visca UDP (no headers)
-                        Visca UDP (with Headers)
-                        ONVIF ??
-                        NDI ??
-                -->
-                <div class="input-group mb-3">
-                  <div class="input-group-text">
-                    <input class="form-check-input mt-0" type="checkbox" id="cam1" onclick="disableCam(this)" checked>
+                <div class="container-full px-0">
+                  <!-- Working Template -->
+                  <div id="camConfig" class="input-group mb-3 mx-0 row">
+                    <div class="input-group-text col-md-auto col-auto">
+                      <input name="camConfigToggle" class="form-check-input mt-0" type="checkbox" id="camConfigToggle"
+                        onclick="toggleCam(this)" checked>
+                    </div>
+                    <div id="camConfigName" class="input-group-text flex-grow-1 col-md-3 col-6" id="basic-addon1">CAM1
+                      [ATEM In1]</div>
+                    <div class="col-md-2 col-4 px-0">
+                      <select name="camConfigProtocol" class="form-select" id="camConfigProtocol" required>
+                        <option value="" selected>Protocol</option>
+                        <option value="0">VISCA UDP - Headers</option>
+                        <option value="1">VISCA UDP - No Headers</option>
+                        <option value="2">VISCA TCP</option>
+                      </select>
+                    </div>
+                    <div class="col-md-3 col-6 px-0">
+                      <input name="camConfigIP" type="text" class="form-control" id="camConfigIP" placeholder="0.0.0.0" value=""
+                        minlength="7" maxlength="15" size="15"
+                        pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
+                    </div>
+                    <div class="col-md-2 col-6 px-0">
+                      <input name="camConfigPort" type="text" class="form-control" id="camConfigPort" placeholder="52381" value=""
+                        minlength="1" maxlength="5" size="5" pattern="^(\d{1,5})$">
+                    </div>
                   </div>
-                  <span class="input-group-text" id="basic-addon1">CAM1 [ATEM In1]</span>
-                  <select class="form-select" id="cam1Protocol" required>
-                    <option value="" selected>Proto</option>
-                    <option value="0">UDP</option>
-                    <option value="1">TCP</option>
-                  </select>
-                  <input type="text" class="form-control" id="cam1IP" placeholder="0.0.0.0" value="" minlength="7"
-                    maxlength="15" size="15"
-                    pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
-                  <input type="text" class="form-control mx-auto" id="cam1Port" placeholder="52381" value=""
-                    minlength="1" maxlength="5" size="5" pattern="^(\d{1,5})$">
-                  <select class="form-select" id="cam1Headers" required>
-                    <option value="" selected>Headers</option>
-                    <option value="0">Exclude</option>
-                    <option value="1">Include</option>
-                  </select>
-                </div>
-                <div class="input-group mb-3">
-                  <div class="input-group-text">
-                    <input class="form-check-input mt-0" type="checkbox" id="cam2" onclick="disableCam(this)" checked>
-                  </div>
-                  <span class="input-group-text" id="basic-cam2">CAM2 [ATEM In1]</span>
-                  <select class="form-select" id="cam2Protocol" required>
-                    <option value="" selected>Proto</option>
-                    <option value="0">UDP</option>
-                    <option value="1">TCP</option>
-                  </select>
-                  <input type="text" class="form-control" id="cam2IP" placeholder="0.0.0.0" value="" minlength="7"
-                    maxlength="15" size="15"
-                    pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
-                  <input type="text" class="form-control mx-auto" id="cam2Port" placeholder="52381" value=""
-                    minlength="1" maxlength="5" size="5" pattern="^(\d{1,5})$">
-                  <select class="form-select" id="cam2Headers" required>
-                    <option value="" selected>Headers</option>
-                    <option value="0">Exclude</option>
-                    <option value="1">Include</option>
-                  </select>
-                </div>
-                <div class="input-group mb-3 w-auto">
-                  <div class="input-group-text">
-                    <input class="form-check-input mt-0" type="checkbox" id="cam3" onclick="disableCam(this)" checked>
-                  </div>
-                  <span class="input-group-text" id="basic-cam3">CAM3 [ATEM In2]</span>
-                  <select class="form-select" id="cam3Protocol" required>
-                    <option value="" selected>Proto</option>
-                    <option value="0">UDP</option>
-                    <option value="1">TCP</option>
-                  </select>
-                  <input type="text" class="form-control" id="cam3IP" placeholder="0.0.0.0" value="" minlength="7"
-                    maxlength="15" size="15"
-                    pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
-                  <input type="text" class="form-control" id="cam3Port" placeholder="asd" value="" minlength="1"
-                    maxlength="5" size="5" pattern="^(\d{1,5})$">
-                  <select class="form-select" id="cam3Headers" required>
-                    <option value="" selected>Headers</option>
-                    <option value="0">Exclude</option>
-                    <option value="1">Include</option>
-                  </select>
+                  <!-- End Camera Config Template-->
                 </div>
               </span>
               <button type="submit" class="btn btn-primary py-3 my-3">Submit</button>
@@ -599,32 +696,155 @@
           </div>
         </div>
       </div>
+      <!-- Logs Accordian -->
       <div class="accordion-item">
         <div id="collapseLogs" class="accordion-collapse collapse" data-bs-parent="#accordionExample">
           <div class="accordion-body">
-            Logs
+            <div>
+              <span class="alert alert-info mb-1 py-1">Info</span>
+              <span class="alert alert-light mb-1 py-1">Debug</span>
+              <span class="alert alert-warning mb-1 py-1">Warn</span>
+              <span class="alert alert-danger mb-1 py-1">Error</span>
+            </div>
+            <div id="logData"></div>
           </div>
         </div>
       </div>
       <div class="accordion-item">
         <div id="collapseFirmware" class="accordion-collapse collapse" data-bs-parent="#accordionExample">
           <div class="accordion-body">
-            Firmware
+            <div class="container-full">
+              <!-- Device Info -->
+              <div class="row fs-5 mb-3">
+                <ul class="nav nav-tabs">
+                  <li class="nav-item">
+                    <div class="nav-link active bg-primary text-light" style="border:0px" href="#">Internals</div>
+                  </li>
+                </ul>
+                <span class="border border-primary py-3">
+                  <div class="input-group mb-3">
+                    <span class="input-group-text col-3">Hardware:</span>
+                    <span class="input-group-text bg-white col-9">%BOARD_NAME%</span>
+                  </div>
+                  <!-- Joystick Info -->
+                  <div class="row">
+                    <div class="col-3">Pan:</div>
+                    <div id="panValue" class="col-3"></div>
+                    <div class="col-3">Visca:</div>
+                    <div id="panVisca" class="col-3"></div>
+                  </div>
+                  <div id="joystickContainer">
+                    <div id="joystickDeadZone">
+                      <input id="axisPan" type="range" class="form-range align-bottom" min="0" max="2047">
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="col-3">Tilt:</div>
+                    <div id="tiltValue" class="col-3"></div>
+                    <div class="col-3">Visca:</div>
+                    <div id="tiltVisca" class="col-3"></div>
+                  </div>
+                  <div id="joystickContainer">
+                    <div id="joystickDeadZone">
+                      <input id="axisTilt" type="range" class="form-range align-bottom" min="0" max="2047">
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div class="col-3">Zoom:</div>
+                    <div id="zoomValue" class="col-3"></div>
+                    <div class="col-3">Visca:</div>
+                    <div id="zoomVisca" class="col-3"></div>
+                  </div>
+                  <div id="joystickContainer">
+                    <div id="joystickDeadZone">
+                      <input id="axisZoom" type="range" class="form-range align-bottom" min="0" max="2047">
+                    </div>
+                  </div>
+                </span>
+              </div>
+              <!-- Restart Button -->
+              <div class="row">
+                <button type="button" class="btn btn-success btn-lg btn-block"
+                  onclick="location.href='/restart';">Restart Joystick</button>
+              </div>
+              <hr class="my-4">
+              <!-- Upload Button -->
+              <div class="row">
+                <button type="button" class="btn btn-warning btn-lg btn-block" onclick="location.href='/erase';">Reset
+                  All Data</button>
+              </div>
+              <hr class="my-4">
+              <!-- Best post on this -->
+              <!-- https://tympanus.net/codrops/2015/09/15/styling-customizing-file-inputs-smart-way/ -->
+              <!-- https://www.quirksmode.org/dom/inputfile.html -->
+              <form method='POST' action='#' enctype='multipart/form-data' id='upload_form'>
+                <div class="input-group">
+                  <label id="fileButton" class="btn btn-success btn-lg btn-block" for="update">Choose .bin file:</label>
+                  <input id="fileName" class="form-control" type="text" placeholder="" readonly>
+                  <input type='file' id="update" class="form-control-file" name='update' accept=".bin"
+                    onchange="updateFilename()" style="display:none;">
+                  <input type='submit' class="btn btn-primary btn-lg px-5" value='Update'>
+                </div>
+                <div class="progress my-3" role="progressbar" aria-label="Basic example" aria-valuenow="0"
+                  aria-valuemin="0" aria-valuemax="100">
+                  <div id="prg" class="progress-bar" style="width: 0%"></div>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
 
     <div class="b-example-divider"></div>
 
   </main>
   <script>
-    function disableCam(e) {
-      document.getElementById(e.id + "Protocol").disabled = !e.checked;
-      document.getElementById(e.id + "IP").disabled = !e.checked;
-      document.getElementById(e.id + "Port").disabled = !e.checked;
-      document.getElementById(e.id + "Headers").disabled = !e.checked;
-	}
+    updateNetworks();
+    updateSwitcherStatus();
+    updateCameraStatus();
+    updateCameraConfig();
+    toggleStaticIP(document.getElementById("staticIPToggle"));
+    document.body.classList.remove("nodisplay");
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const smsg = urlParams.get('success')
+    if (smsg) {
+      document.getElementById("smsgBox").innerHTML = smsg;
+      document.getElementById("smsgBox").style.display = 'block';
+    }
+
+    /* TODO Change to JavaScript fetch API? and get rid of jquery */
+    $('#upload_form').submit(function (e) {
+      e.preventDefault();
+      var form = $('#upload_form')[0];
+      var data = new FormData(form);
+      $.ajax({
+        url: '/update',
+        type: 'POST',
+        data: data,
+        contentType: false,
+        processData: false,
+        xhr: function () {
+          var xhr = new window.XMLHttpRequest();
+          xhr.upload.addEventListener('progress', function (evt) {
+            if (evt.lengthComputable) {
+              var per = evt.loaded / evt.total;
+              per = Math.round(per * 100);
+              $('#prg').width(per + '%');
+            }
+          }, false);
+          return xhr;
+        },
+        success: function (d, s) {
+          console.log('success!')
+          window.location.href = '/restart';
+        },
+        error: function (a, b, c) {
+        }
+      });
+    });
   </script>
 </body>
 
