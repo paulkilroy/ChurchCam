@@ -47,7 +47,7 @@ It's unlikely you will need to change this, though I'd be very interested if you
     Height = 60;
     WallThickness = 2.5; // [1:5]  
 
-    FilletRadius = 2; // [0.1:12] 
+    FilletRadius = 3; // [0.1:12] 
     // Decorations or ventilation holes
     VentType = "None"; // [None, Decorations, VentHoles:Ventilation Holes]
     // Width of vent/decoration holes
@@ -55,21 +55,22 @@ It's unlikely you will need to change this, though I'd be very interested if you
 
 /* [Fastening Options] */
     // Methods of securing the closure of the box
-    FasteningType = "Push"; // [Screw:Screw Fit, Push:Push Fit]
+    FasteningType = "Screw"; // [Screw:Screw Fit, Push:Push Fit]
     // Number for fastenings along thge edge
     NumberOfFastenings = 2; // [0:10]
     // Thickness of the fastening tabs
     FasteningTabThickness = 2; // [1:5]
     // Diameter of fastener hole for screw fitting
-    FasteningHoleDiameter = 2; // [0.1:5]
+    // PSK was 2.0
+    FasteningHoleDiameter = 2.2; // [0.1:5]
 
 /* [End Panels] */
     BackPanelType = "Discrete"; // [None, IntegratedWithTop:Integrated With Top, IntegratedWithBase:Integrated With Base, Discrete]
     FrontPanelType = "Discrete"; // [None, IntegratedWithTop:Integrated With Top, IntegratedWithBase:Integrated With Base, Discrete]
     // Panel Text Type
     EmbossPanelDecorations = 1; // [0:Demboss, 1:Emboss]
-    // End Panel Tolerance
-    PanelTolerance = 0.9;
+    // End Panel Tolerance PSK was .9 - .3 a little too tight
+    PanelTolerance = 0.4;
     // Use example panel decorations
     examplePanels = 0; // [0:No, 1:Yes]
 
@@ -561,8 +562,12 @@ It's unlikely you will need to change this, though I'd be very interested if you
                     [-InteriorDims().x/2, -InteriorDims().y/2, -cylRad/3],
                     numItems)
                 {
-                    rotate([90, 0, 0]){
-                        cylinder(d = holeDia, 3.0*thickness, center=true);
+                    // PSK Nudging cylinder out of case a bit
+                    translate( [0,-3.5,0])
+                       rotate([90, 0, 0]){
+                        // PSK Making screw hold a cone to make screws flush
+                        // cylinder(d = holeDia, 3.0*thickness, center=true);
+                        cylinder(d1 = holeDia, d2 = holeDia*4, 3.0*thickness, center=true);
                     }
                 }                
             }        
@@ -714,7 +719,8 @@ It's unlikely you will need to change this, though I'd be very interested if you
         cutout = true;
         difference(){
             color(PanelColour)
-            RoundBox(panelDims, FilletRadius, true);
+            // PSK Add to the radius here to ensure a fit
+            RoundBox(panelDims, FilletRadius+2, true);
 
             // Translate so that bottom left corner of panel is "origin" for controls
             translate(-panelDims/2){
@@ -817,7 +823,7 @@ It's unlikely you will need to change this, though I'd be very interested if you
                 rotate(TopRotate){
                     // Joystick - https://www.micros.com.pl/mediaserver/ryc-rys.r300.jpg
                     translate([0+10,0,-Height/2-39.5-19+WallThickness]) %cylinder(39.5, d=35);
-                    translate([0+10,0,-Height/2-19+WallThickness]) %cylinder(19, d=19);
+                    translate([0+10,0,-Height/2-19+WallThickness]) %cylinder(19, d=10);
                     translate([0+10,0,0-Height/2+25.5/2+WallThickness])%cube([40.4, 40.4, 25.5],true);
                     color(CaseColour){
                       difference() {
