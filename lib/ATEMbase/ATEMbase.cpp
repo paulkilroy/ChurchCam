@@ -690,7 +690,8 @@ uint8_t ATEMbase::getVideoSrcIndex(uint16_t videoSrc)	{
 		case 10021:  // ME 2 Prev
 			return 46;
 		default:
-			return 0;
+			//Serial.printf("unknown VideoSourceIndex: %d\n", videoSrc);
+			return 47;
 	}
 }
 		

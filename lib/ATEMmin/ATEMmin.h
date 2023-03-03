@@ -80,7 +80,12 @@ private:
 			uint16_t atemTallyByIndexSources;
 			uint8_t atemTallyByIndexTallyFlags[41];
 			uint16_t streamingStatusFlags; //Added by Aron N. Het Lam
-
+			// Added by psk
+			#define INPR_MAX_INPUTS 21
+			char atemInputLongName[INPR_MAX_INPUTS][21];
+        	char atemInputShortName[INPR_MAX_INPUTS][5];
+            uint8_t atemInputPortType[INPR_MAX_INPUTS];
+			bool atemInputInitialized[INPR_MAX_INPUTS];
 public:
 			// Public Methods in ATEM.h:
 	
@@ -118,6 +123,13 @@ public:
 			bool getStreamInvalidState();
 			bool getStreamStopping();
 			bool getStreamUnknownError();
+
+			// Added by PSK
+            char *  getInputLongName(uint16_t videoSource);
+            char *  getInputShortName(uint16_t videoSource);
+			uint8_t getInputPortType(uint16_t videoSource);
+			boolean isInputInitialized(uint16_t videoSource);
+
 };
 
 #endif
