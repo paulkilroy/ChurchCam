@@ -121,7 +121,7 @@ extern struct Settings settings;
 extern struct LogItem LogItems[];
 
 extern const char config_html PROGMEM[];
-//extern  char restart_html PROGMEM[];
+extern const char restart_html PROGMEM[];
 extern const char bootstrap_bundle_min_js PROGMEM[];
 extern const char bootstrap_min_css PROGMEM[];
 extern const char headers_css PROGMEM[];
@@ -168,6 +168,10 @@ void visca_recall(int);
 int cameraStatus(int);
 void webSetup();
 void webLoop();
+int discoverCameras();
+String discoveredCameraName(int i);
+IPAddress discoveredCameraIP(int i);
+
 
 int connect( int cameraNumber );
 int send( int cameraNumber, byte packet[], int size );

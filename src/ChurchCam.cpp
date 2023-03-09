@@ -123,9 +123,6 @@ void WiFiEvent(WiFiEvent_t event) {
   switch (event) {
     case ARDUINO_EVENT_ETH_START:
       logi("%d ETH_START", WiFi.getStatusBits());
-      // TODO Should I just set this in startup() ?? Why keep setting it
-      // How often does this get called?
-      // ETH.setHostname(AP_SSID);
       break;
     case ARDUINO_EVENT_ETH_CONNECTED:
       logi("%d ETH_CONNECTED", WiFi.getStatusBits());
@@ -144,7 +141,6 @@ void WiFiEvent(WiFiEvent_t event) {
       break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
       logi("%d ETH_DISCONNECTED", WiFi.getStatusBits());
-      /* TODO testing commenting this out */
       WiFi.mode(WIFI_STA);
       WiFi.setAutoReconnect(true);
       WiFi.begin();
@@ -172,7 +168,6 @@ void WiFiEvent(WiFiEvent_t event) {
     case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
       { 
         logi("%d WIFI_STA_DISCONNECTED", WiFi.getStatusBits());
-        /* TODO testing commenting this out */
         if (WiFi_Worked) {
           // Keep it simple and avoid AP_STA mode, its very slow and inconsistent. If your wifi suddnely blew up
           // and you need to reconfigure, just restart the device

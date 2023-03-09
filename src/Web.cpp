@@ -9,102 +9,12 @@
 
 #include "globals.h"
 
-// AsyncWebServer server(8000);
 WebServer srvr(80);
 String RestartMsg = "";
 bool Restart = false;
 bool ResetWiFi = false;
 String ResetWiFiSSID = "";
 String ResetWiFiPSK = "";
-
-void handleRestartAndWait() {
-  srvr.sendHeader("Connection", "close");
-
-  if ( RestartMsg == "" ) RestartMsg = "Restart Successful.";
-
-  Serial.println("RESTART - Sending HTML");
-  String page = "";
-  page += "<html>";
-  page += "";
-  page += "<head>";
-  page += "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
-  page += "";
-  page += "    <style>";
-  page += "        h1 {";
-  page += "            font-family: \"Roboto\", Arial, Helvetica, sans-serif;";
-  page += "            font-weight: 400;";
-  page += "            margin-left: 1em";
-  page += "        }";
-  page += "        .loader {";
-  page += "            border: 16px solid #f3f3f3;";
-  page += "            border-radius: 50%;";
-  page += "            border-top: 16px solid #0D6EFD;";
-  page += "            width: 40px;";
-  page += "            height: 40px;";
-  page += "            -webkit-animation: spin 2s linear infinite;";
-  page += "            animation: spin 2s linear infinite;";
-  page += "        }";
-  page += "";
-  page += "        @-webkit-keyframes spin {";
-  page += "            0% {";
-  page += "                -webkit-transform: rotate(0deg);";
-  page += "            }";
-  page += "";
-  page += "            100% {";
-  page += "                -webkit-transform: rotate(360deg);";
-  page += "            }";
-  page += "        }";
-  page += "";
-  page += "        @keyframes spin {";
-  page += "            0% {";
-  page += "                transform: rotate(0deg);";
-  page += "            }";
-  page += "";
-  page += "            100% {";
-  page += "                transform: rotate(360deg);";
-  page += "            }";
-  page += "        }";
-  page += "    </style>";
-  page += "    <script>\n";
-  page += "        if (location.protocol != \"file:\") {\n";
-  page += "            keepPinging = true;";
-  page += "            var http = new XMLHttpRequest();\n";
-  page += "            http.addEventListener('load', (event) => { keepPinging = false;clearInterval(callback); console.log('got it'); window.location.href = '/?success=" + RestartMsg + "'; });\n";
-  page += "            http.addEventListener('error', (event) => { console.log('still waiting'); });\n";
-  page += "            callback = setInterval(function () {\n";
-  page += "                if( keepPinging ) {\n";
-  page += "                    http.open('GET', '/ping');\n";
-  page += "                    http.send();\n";
-  page += "                }\n";
-  page += "            }, 1000);\n";
-  page += "        }\n";
-  page += "    </script>\n";
-  page += "</head>";
-  page += "";
-  page += "<body>";
-  page += "    <table>";
-  page += "        <tr>";
-  page += "            <td>";
-  page += "                <div class='loader'></div>";
-  page += "            </td>";
-  page += "            <td>";
-  page += "                <h1>";
-  page += RestartMsg;
-  page += "                </h1>";
-  page += "                <h1>Waiting for reboot...</h1>";
-  page += "            </td>";
-  page += "        </tr>";
-  page += "    </table>";
-  page += "</body>";
-  page += "</html>";
-
-  //Serial.printf("web request for: %s%s\n", request->host().c_str(), request->url().c_str());
-  srvr.send(200, "text/html", page);
-  delay(100);
-  Serial.println("RESTART - restart()");
-
-  Restart = true;
-}
 
 String processor(const String& var) {
   String serverVars = "";
@@ -199,208 +109,23 @@ String processor(const String& var) {
   else if ( var == "SSID" ) return WiFi.SSID();
   else if ( var == "PSK" ) return WiFi.psk();
   else if ( var == "BOARD_NAME" ) return Pinouts[HWRev].name;
+  else if ( var == "RESTART_MSG" ) return RestartMsg;
 
-  Serial.printf("Unknown replace: %s\n", var.c_str());
+  logi("Unknown replace: %s\n", var.c_str());
   return String();
 }
-/*
-String processorNew(const String& var) {
-  Serial.printf("Processor replace: %s\n", var.c_str());
-  //if ( var == "Netowrks" ) {
-  //      { "name": "Ethernet", "status": "off", "ip": "10.0.4.40", "info": "tbd" },
-  if ( var == "SERVER_VARS" ) {
-    String serverVars = "";
-    serverVars += "Networks = [";
-    const char nfmt[] = "{ \"name\": \"%s\", \"status\": \"%s\", \"ip\": \"%s\", \"ssid\": \"%s\", \"info\": \"%s\" },\n";
-    char network[150];
-    String status = "";
 
-    status = WiFi.getStatusBits() & ETH_STARTED_BIT ? "down" : "off";
-    if ( WiFi.getStatusBits() & ETH_HAS_IP_BIT ) status = "up";
-    sprintf(network, nfmt, "Ethernet", status.c_str(),
-      status == "up" ? ETH.localIP().toString().c_str() : "-",
-      "-",
-      "");
-    serverVars += network;
 
-    status = WiFi.getStatusBits() & STA_STARTED_BIT ? "down" : "off";
-    if ( WiFi.getStatusBits() & STA_HAS_IP_BIT ) status = "up";
-    sprintf(network, nfmt, "WiFi", status.c_str(),
-      status == "up" ? WiFi.localIP().toString().c_str() : "-",
-      getSSID().c_str(),
-      ( String(WiFi.RSSI()) + " dBm" ).c_str());
-    serverVars += network;
-    //Serial.printf("WiFi.getTxPower() %d\n", WiFi.getTxPower());
-
-    status = WiFi.getStatusBits() & AP_STARTED_BIT ? "up" : "off";
-    sprintf(network, nfmt, "Hotspot", status.c_str(),
-      status == "up" ? WiFi.softAPIP().toString().c_str() : "-",
-      AP_SSID,
-      "");
-    serverVars += network;
-    serverVars += "];\n";
-
-    serverVars += "ATEMSwitcher = [";
-    //  } else if ( var == "ATEMSwitcher" ) {
-        //       { "status": "down", "name": "ATEM Mini Pro", "ip": "10.0.4.40", "port": "-", "protocol": "1" },
-    const char afmt[] = "{ \"status\": \"%s\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%s\", \"protocol\": \"%s\" }\n";
-    char input[150];
-    String name = atemSwitcher.getATEMmodelname();
-    if ( name == "" ) name = "ATEM Switcher";
-    sprintf(input, afmt, atemSwitcher.isConnected() ? "up" : "down",
-      name.c_str(),
-      settings.switcherIP.toString().c_str(),
-      "-",
-      "1");
-    serverVars += input;
-    serverVars += "];\n";
-
-    serverVars += "ATEMCameras = [";
-    //} else if ( var == "ATEMCameras" ) {
-      //       { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "protocol": "1", "headers": "0" },
-    const char cfmt[] = "{ \"id\": \"%d\", \"status\": \"%s\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%d\", \"protocol\": \"%d\", \"headers\": \"%d\" },\n";
-    int cameraNumber = 0;
-    for ( uint16_t i = 0; i < NUM_CAMERAS; i++ ) {
-      // If no switcher than show all potential inputs...
-      if ( atemSwitcher.isConnected() && !atemSwitcher.isInputInitialized(i) )
-        continue;
-      // 0 is an external port input on the ATEM - thats what we want
-      if ( atemSwitcher.isConnected() && atemSwitcher.getInputPortType(i) != 0 )
-        continue;
-
-      int s = cameraStatus(cameraNumber);
-      String status = "na";
-      if ( s == CAMERA_UP ) status = "up";
-      if ( s == CAMERA_DOWN ) status = "down";
-      if ( s == CAMERA_OFF ) status = "off";
-
-      String camName = atemSwitcher.getInputShortName(i);
-      if ( camName == "" ) camName = "Camera " + String(i);
-      char input[150];
-      // Options for camera status 
-      //    -compute status from responses(?) or just last response
-      //  * -explicit status on page generation (way it was working)
-      //    -status in background via ajax (regular polling of networks/atem/cameras)
-      //    -status via "update status" ajax button on webpage
-      //    Either way don't for get to backout status for non cameras (H2R/AV PC)
-      //    i.e. cameras with no IP addresses
-      sprintf(input, cfmt, cameraNumber, status.c_str(),
-        camName.c_str(),
-        settings.cameraIP[cameraNumber].toString().c_str(),
-        settings.cameraPort[cameraNumber],
-        settings.cameraProtocol[cameraNumber],
-        settings.cameraHeaders[cameraNumber]);
-      cameraNumber++;
-      serverVars += input;
-    }
-    serverVars += "];\n";
-    serverVars += "StaticIP = " + (String)( settings.staticIP ? "true" : "false" ) + ";\n";
-    serverVars += "StaticIPAddr = \"" + settings.staticIPAddr.toString() + "\";\n";
-    serverVars += "StaticIPSubnetMask = \"" + settings.staticSubnetMask.toString() + "\";\n";
-    serverVars += "StaticIPGateway = \"" + settings.staticGateway.toString() + "\";\n";
-    serverVars += "SSID = \"" + WiFi.SSID() + "\";\n";
-    serverVars += "PSK = \"" + WiFi.psk() + "\";\n";
-    serverVars += "BoardName = \"" + (String)Pinouts[HWRev].name + "\";\n";
-
-    return serverVars;
-  }
-
-  Serial.printf("Unknown replace: %s\n", var.c_str());
-  return String();
-}
-*/
-void handleDiscoverCameras() {
-  //       { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "protocol": "0", "headers": "1" },
-  String inputs = "["; //"DiscoveredCameras = [";
-  const char fmt[] = "{ \"id\": \"%d\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%u\", \"protocol\": \"%d\", \"headers\": \"%d\" }\n";
-  int n = MDNS.queryService("ssh", "tcp");
-  if ( n == 0 ) {
-    Serial.println("No camera services found");
-  } else {
-    Serial.printf("%d Camera service(s) found\n", n);
-    for ( int i = 0; i < n; ++i ) {
-      if ( i > 0 ) inputs += ',';
-      char input[150];
-      sprintf(input, fmt, i,
-        MDNS.hostname(i).c_str(),
-        MDNS.IP(i).toString().c_str(),
-        MDNS.port(i),
-        PROTOCOL_TCP,
-        0);
-      inputs += input;
-    }
-  }
-  inputs += "]";
-  srvr.send(200, "application/json", inputs);
-}
-
-/* Using this patter for sending large content
-      server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-      server.send ( 200, "text/html", first_part.c_str());
-      while (...) {
-          resp = "...";
-          resp += "...";
-          server.sendContent(resp);
-      }
-*/
-/*
-void handleRootNew() {
-  printf("web request for: %s\n", srvr.uri().c_str());
-
-  srvr.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  srvr.send(200, "text/html", "");
-
-  int size = strlen_P(config_html);
-  boolean inVar = false;
-  String varName = "";
-  int start = 0, end = 0;
-  for ( ; end < size; end++ ) {
-    char c = pgm_read_word_near(config_html + end);
-    if ( inVar ) {
-      if ( c == '%' ) {
-        inVar = false;
-        if ( varName == "" ) {
-          start = end;
-        } else {
-          // Serial.printf("handleRoot: sending var %s\n", varName.c_str());
-          String content = processor(varName);
-          if ( content.length() > 0 ) srvr.sendContent(content);
-          varName = "";
-          start = end + 1;
-        }
-      } else {
-        varName += c;
-      }
-    } else if ( c == '%' ) {
-      // reached a stopping point, send buffer from 'start' up to 'end'
-      inVar = true;
-      // Serial.printf("handleRoot: sending %d to %d\n", start, end);
-      srvr.sendContent_P(&config_html[start], end - start);
-      start = end;
-    } else {
-
-    }
-  }
-  if ( start < end ) {
-    srvr.sendContent_P(&config_html[start], end - start);
-  }
-  //srvr.send_P(200, "text/html", config_html, processor);
-}
-*/
-
-void handleRoot() {
-  printf("web request for: %s\n", srvr.uri().c_str());
-
-  //srvr.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  //srvr.send(200, "text/html", "");
+void handleProcessor(const char html_file[] ) {
+  logi("web request for: %s\n", srvr.uri().c_str());
   String html = "";
 
-  int size = strlen_P(config_html);
+  int size = strlen_P(html_file);
   boolean inVar = false;
   String varName = "";
   int start = 0, end = 0;
   for ( ; end < size; end++ ) {
-    char c = pgm_read_word_near(config_html + end);
+    char c = pgm_read_word_near(html_file + end);
     if ( inVar ) {
       if ( c == '%' ) {
         inVar = false;
@@ -420,25 +145,65 @@ void handleRoot() {
       // reached a stopping point, send buffer from 'start' up to 'end'
       inVar = true;
       // Serial.printf("handleRoot: sending %d to %d\n", start, end);
-      //srvr.sendContent_P(&config_html[start], end - start);
-      html.concat(&config_html[start], end - start);
+      html.concat(&html_file[start], end - start);
       start = end;
     } else {
 
     }
   }
   if ( start < end ) {
-    //srvr.sendContent_P(&config_html[start], end - start);
-    html.concat(&config_html[start], end - start);
+    html.concat(&html_file[start], end - start);
   }
   srvr.send(200, "text/html", html);
-  //srvr.send_P(200, "text/html", config_html, processor);
+}
+
+void handleRoot() {
+  handleProcessor( config_html );
+}
+
+void handleRestartAndWait() {
+  srvr.sendHeader("Connection", "close");
+
+  if ( RestartMsg == "" ) RestartMsg = "Restart Successful.";
+
+  Serial.println("RESTART - Sending HTML");
+  handleProcessor( restart_html );
+  Serial.println("RESTART - restart()");
+
+  Restart = true;
+}
+
+void handleDiscoverCameras() {
+  logi("web request for: %s\n", srvr.uri().c_str());
+  //       { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "protocol": "0", "headers": "1" },
+  String inputs = "["; //"DiscoveredCameras = [";
+  const char fmt[] = "{ \"id\": \"%d\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%u\", \"protocol\": \"%d\", \"headers\": \"%d\" }\n";
+  int n = discoverCameras();
+  if ( n == 0 ) {
+    logi("No camera services found...");
+  } else {
+    logi("%d Camera service(s) found", n);
+    for ( int i = 0; i < n; ++i ) {
+      if ( i > 0 ) inputs += ',';
+      char input[150];
+      sprintf(input, fmt, i,
+        discoveredCameraName(i).c_str(),
+        discoveredCameraIP(i).toString().c_str(),
+        VISCA_PORT,
+        PROTOCOL_UDP,
+        1);
+      inputs += input;
+    }
+  }
+
+  inputs += "]";
+  logi("DiscoveredCamers = %s", inputs.c_str());
+  srvr.send(200, "application/json", inputs);
 }
 
 // Serve setup web page to client, by sending HTML with the correct variables
 void handleRootOld() {
-  //printf("web request for: %s%s\n", request->host().c_str(), request->url().c_str());
-  Serial.println("web request for: /old");
+  logi("web request for: /old");
 
   String html = "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width,initial-scale=1.0\"><title>PTZ setup</title></head><script>function switchIpField(e){console.log(\"switch\");console.log(e);var target=e.srcElement||e.target;var maxLength=parseInt(target.attributes[\"maxlength\"].value,10);var myLength=target.value.length;if(myLength>=maxLength){var next=target.nextElementSibling;if(next!=null){if(next.className.includes(\"IP\")){next.focus();}}}else if(myLength==0){var previous=target.previousElementSibling;if(previous!=null){if(previous.className.includes(\"IP\")){previous.focus();}}}}function ipFieldFocus(e){console.log(\"focus\");console.log(e);var target=e.srcElement||e.target;target.select();}function load(){var containers=document.getElementsByClassName(\"IP\");for(var i=0;i<containers.length;i++){var container=containers[i];container.oninput=switchIpField;container.onfocus=ipFieldFocus;}containers=document.getElementsByClassName(\"tIP\");for(var i=0;i<containers.length;i++){var container=containers[i];container.oninput=switchIpField;container.onfocus=ipFieldFocus;}toggleStaticIPFields();}function toggleStaticIPFields(){var enabled=document.getElementById(\"staticIP\").checked;document.getElementById(\"staticIPHidden\").disabled=enabled;var staticIpFields=document.getElementsByClassName('tIP');for(var i=0;i<staticIpFields.length;i++){staticIpFields[i].disabled=!enabled;}}</script><style>a{color:#0F79E0}</style><body style=\"font-family:Verdana;white-space:nowrap;\"onload=\"load()\"><table cellpadding=\"2\"style=\"width:100%\"><tr bgcolor=\"#777777\"style=\"color:#ffffff;font-size:.8em;\"><td colspan=\"3\"><h1>&nbsp;PTZ setup</h1><h2>&nbsp;Status:</h2></td></tr><tr><td><br></td><td></td><td style=\"width:100%;\"></td></tr><tr><td>Connection Status:</td><td colspan=\"2\">";
   switch ( WiFi.status() ) {
@@ -595,7 +360,7 @@ int getCamNum(String s, String x) {
 }
 // Save new settings from client in EEPROM and restart the ESP8266 module
 void handleSave() {
-  printf("SAVE request for: %s\n", srvr.uri().c_str());
+  logi("SAVE request for: %s\n", srvr.uri().c_str());
 
   for ( uint8_t i = 0; i < srvr.args(); i++ ) {
     String var = srvr.argName(i);
@@ -622,13 +387,11 @@ void handleSave() {
     } else if ( var.startsWith("camConfigProtocol") ) {
       int camNum = getCamNum(var, "camConfigProtocol");
       settings.cameraProtocol[camNum] = val.toInt();
-/*
-<option value="0">VISCA UDP - Headers</option>
-<option value="1">VISCA UDP - No Headers</option>
-<option value="2">VISCA TCP</option>
-*/
-      // TODO Confirm if we need more than TCP without Headers and UDP with Headers
-      if( val.toInt() == 2 || val.toInt() == 2 ) {
+      /*
+      <option value="0">VISCA UDP</option>
+\      <option value="1">VISCA TCP</option>
+      */
+      if ( val.toInt() == 1 ) {
         settings.cameraHeaders[camNum] = 0;
       } else {
         settings.cameraHeaders[camNum] = 1;
@@ -637,7 +400,7 @@ void handleSave() {
       int camNum = getCamNum(var, "camConfigPort");
       settings.cameraPort[camNum] = val.toInt();
     } else {
-      Serial.printf("handleSave(): Unknown var: %s - %s\n", var.c_str(), val.c_str());
+      logi("handleSave(): Unknown var: %s - %s", var.c_str(), val.c_str());
     }
   }
 
@@ -768,7 +531,7 @@ void handleSaveOld() {
 
 // Send 404 to client in case of invalid webpage being requested.
 void handleNotFound() {
-  printf("web request for: %s\n", srvr.uri().c_str());
+  logi("web request for: %s\n", srvr.uri().c_str());
 
   srvr.send(404, "text/html", "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width, initial-scale=1.0\"><title>PTZ Setup</title></head><body style=\"font-family:Verdana;\"><table bgcolor=\"#777777\"border=\"0\"width=\"100%\"cellpadding=\"1\"style=\"color:#ffffff;font-size:.8em;\"><tr><td><h1>&nbsp PTZ Setup</h1></td></tr></table><br>404 - Page not found</body></html>");
 }
@@ -788,24 +551,24 @@ void webSetup() {
   srvr.on("/", handleRoot);
   // Let the browser cache these
   srvr.on("/bootstrap.min.css", HTTP_GET, []() {
-    Serial.printf("web request for: %s\n", srvr.uri().c_str());
+    logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.send_P(200, text_css, bootstrap_min_css); });
   srvr.on("/headers.css", []() {
-    Serial.printf("web request for: %s\n", srvr.uri().c_str());
+    logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.send_P(200, text_css, headers_css); });
   srvr.on("/bootstrap.bundle.min.js", HTTP_GET, []() {
-    Serial.printf("web request for: %s\n", srvr.uri().c_str());
+    logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.send_P(200, text_javascript, bootstrap_bundle_min_js); });
   srvr.on("/validate-forms.js", HTTP_GET, []() {
-    Serial.printf("web request for: %s\n", srvr.uri().c_str());
+    logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.send_P(200, text_javascript, validate_forms_js); });
 
   srvr.on("/ping", HTTP_GET, []() {
-    Serial.printf("web request for: %s\n", srvr.uri().c_str());
+    logi("web request for: %s", srvr.uri().c_str());
     srvr.send(200, "text/plain", "pong"); });
   srvr.on("/discoverCameras", handleDiscoverCameras);
   srvr.on("/save", handleSave);
@@ -813,7 +576,7 @@ void webSetup() {
   srvr.on("/restart", handleRestartAndWait);
   srvr.on("/logData", handleLogData);
   /*
- 
+
  // TODO Rethink these -- should be able to do this all in software automatically
  // create a UI for the joystick visually with deadzone
  server.on("/center", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -869,7 +632,7 @@ void webSetup() {
 
 void webLoop() {
   // Handle web interface
-  if( networkUp() ) 
+  if ( networkUp() )
     srvr.handleClient();
 
   if ( ResetWiFi ) {

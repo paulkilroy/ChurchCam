@@ -25,6 +25,9 @@ byte visca_response[256] = {};
 #define VISCA_PWR_INQ_BYTE 2
 byte visca_pwr_inq_bytes[] = { 0x01, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x02, 0x81, 0x09, 0x04, 0x00, 0xFF };
 
+byte visca_net_inq_bytes[] = { 0x02, 0x45, 0x4E, 0x51, 0x3A, 0x6E, 0x65, 0x74, 0x77, 0x6F, 0x72, 0x6B, 0xFF, 0x03 };
+
+
 #define RECALL_NUM_BYTE 13
 byte visca_recall_bytes[] = { 0x01, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x02, 0x81, 0x01, 0x04, 0x3f, 0x02, 0x02, 0xff };
 //                            [payload ]  [ payload]  [   sequence number  ]  [           payload                    ]
@@ -56,6 +59,10 @@ boolean pt_stopped = true;
 boolean zoom_stopped = true;
 
 int previousCamera = 0;
+
+const String DiscoveredCameraNames PROGMEM[20];
+const IPAddress DiscoveredCameraIPs PROGMEM[20];
+int NumDiscoveredCameras = 0;
 
 // PSK BUG Keep a UDP socket around for each camera so I'm not creating each one every message
 // SONY MANUAL:
@@ -94,8 +101,8 @@ void visca_send(String command, byte packet[], int size, int cameraNumber, boole
     return;
   }
 
-  // TODO BUG
-  // Write the camera number into the socket portion -- ? maybe ? this wouldn't work if headers are trimmed?
+  //  Note the socket number - byte 9 is not used on send, only receive
+  //  And address number - byte 8 is locked to 1 on IP
 
   // Write the sequence number into the visca packet
   writeBytes(sequenceNumber, packet, 4);
@@ -331,28 +338,61 @@ int cameraStatus(int cameraNumber) {
   }
 }
 
-void discoverCameras(bool camIPs[]) {
+String discoveredCameraName(int i) {
+  return DiscoveredCameraNames[i];
+}
+
+IPAddress discoveredCameraIP(int i) {
+  return DiscoveredCameraIPs[i];
+}
+
+int discoverCameras() {
   // WiFiUDP.parsePacket() sets WiFiUDP.remoteIP() on each packet recieved
   byte response[256];
   int startPos = 0;
-  int sendSize = sizeof(visca_pwr_inq_bytes);
-  int successByte = 9;
-  //bool camIPs[256];
+  int sendSize = sizeof(visca_net_inq_bytes);
 
   // Maybe just use IP with last octlet as 255?
   memset(response, 0, sizeof(response));
   if (!settings.cameraHeaders[CAMERA_BROADCAST]) {
     startPos = VISCA_HEADER_SIZE;
     sendSize -= VISCA_HEADER_SIZE;
-    successByte -= VISCA_HEADER_SIZE;
   }
 
+  logi("Discovering cameras");
+
   connect(CAMERA_BROADCAST);
-  send(CAMERA_BROADCAST, &visca_pwr_inq_bytes[startPos], sendSize);
-  while (recieve(CAMERA_BROADCAST, response)) {
+  send(CAMERA_BROADCAST, &visca_net_inq_bytes[startPos], sendSize);
+  int NumDiscoveredCameras = 0;
+  int len = 0;
+  while (0< (len = recieve(CAMERA_BROADCAST, response))) {
+      // Reply Can I send this to a tcp port?
+  /*
+  02
+MAC:**-**-**-**-**-** *1
+FF
+MODEL:IPCARD *1
+FF
+SOFTVERSION:**.**.** *1
+FF
+IPADR:***.***.***.*** *1
+FF
+MASK:***.***.***.*** *1
+FF
+GATEWAY:***.***.***.*** *1
+FF
+NAME:xxxxxxxx *1
+FF
+WRITE:on *1
+FF
+03
+**/ 
     IPAddress cam = udp.remoteIP();
     //gethostbyaddr() doesn't exist in arduino / esp32
-    printf("Discovered camera at IP: %s\n", cam.toString().c_str());
-    camIPs[cam[3]] = true;
+    logi("Discovered camera at IP: %s len: %d Response: %s", cam.toString().c_str(), len, response);
+    printBytes( response, len );
+    NumDiscoveredCameras++;
   }
+  logi("Found cameras: %d", NumDiscoveredCameras);
+  return NumDiscoveredCameras;
 }

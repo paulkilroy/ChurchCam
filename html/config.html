@@ -260,6 +260,7 @@
       dc.parentNode.replaceChild(div, dc);
     }
 
+    // TODO Convert to pure JS
     async function discoverCameras(btn) {
       btn.disabled = true;
       btn.innerHTML =
@@ -673,9 +674,8 @@
                     <div class="col-md-2 col-4 px-0">
                       <select name="camConfigProtocol" class="form-select" id="camConfigProtocol" required>
                         <option value="" selected>Protocol</option>
-                        <option value="0">VISCA UDP - Headers</option>
-                        <option value="1">VISCA UDP - No Headers</option>
-                        <option value="2">VISCA TCP</option>
+                        <option value="0">VISCA UDP</option>
+                        <option value="1">VISCA TCP</option>
                       </select>
                     </div>
                     <div class="col-md-3 col-6 px-0">

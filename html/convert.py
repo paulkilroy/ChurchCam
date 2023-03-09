@@ -5,8 +5,9 @@ import re
 import os
 
 
-# iles = [ "html/config.html", "html/restart.html", "html/bootstrap.bundle.min.js", "html/bootstrap.min.css", "html/headers.css", "html/validate-forms.js" ]
-files = [ "html/config.html",  "html/bootstrap.bundle.min.js", "html/bootstrap.min.css", "html/headers.css", "html/validate-forms.js" ]
+# TODO Convert css and js to gzip then load into WebFiles.cpp
+files = [ "html/config.html", "html/restart.html", "html/bootstrap.bundle.min.js", "html/bootstrap.min.css", "html/headers.css", "html/validate-forms.js" ]
+#files = [ "html/config.html",  "html/bootstrap.bundle.min.js", "html/bootstrap.min.css", "html/headers.css", "html/validate-forms.js" ]
 outputFile = open('src/WebFiles.cpp', 'w')
 
 outputFile.write(f'#include <pgmspace.h>\n')
@@ -30,7 +31,7 @@ for f in files:
 		line = line.strip()
 		line = line.replace("\\", "\\\\")
 		line = line.replace("\"", "\\\"")
-		if( fn == 'config_html' or fn == 'restart.html' ):
+		if( fn == 'config_html' or fn == 'restart_html' ):
 			line = line.replace("%", "%%")
 			# re.sub(r'(.*)-abc(\.jpg)$', '\g<1>\g<2>', string)
 			# Undo the replace we just did it its surrounding a variable name
