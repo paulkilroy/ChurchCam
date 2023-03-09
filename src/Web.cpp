@@ -536,9 +536,6 @@ void handleNotFound() {
   srvr.send(404, "text/html", "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width, initial-scale=1.0\"><title>PTZ Setup</title></head><body style=\"font-family:Verdana;\"><table bgcolor=\"#777777\"border=\"0\"width=\"100%\"cellpadding=\"1\"style=\"color:#ffffff;font-size:.8em;\"><tr><td><h1>&nbsp PTZ Setup</h1></td></tr></table><br>404 - Page not found</body></html>");
 }
 
-
-
-
 const char text_html[] PROGMEM = "text/html";
 const char text_css[] PROGMEM = "text/css";
 const char text_javascript[] PROGMEM = "text/javascript";
@@ -546,39 +543,45 @@ const char text_javascript[] PROGMEM = "text/javascript";
 void webSetup() {
   // Retire these
   srvr.on("/old", handleRootOld);
+  srvr.on("/saveold", handleSaveOld);
 
   // Initialize and begin HTTP server for handeling the web interface
   srvr.on("/", handleRoot);
+
   // Let the browser cache these
+  // TODO Don't hardcode sizes here
   srvr.on("/bootstrap.min.css", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.send_P(200, text_css, bootstrap_min_css); });
+    srvr.sendHeader("Content-Encoding", "gzip");
+    srvr.send_P(200, text_css, bootstrap_min_css, 23718); });
   srvr.on("/headers.css", []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.send_P(200, text_css, headers_css); });
+    srvr.sendHeader("Content-Encoding", "gzip");
+    srvr.send_P(200, text_css, headers_css, 311); });
   srvr.on("/bootstrap.bundle.min.js", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.send_P(200, text_javascript, bootstrap_bundle_min_js); });
+    srvr.sendHeader("Content-Encoding", "gzip");
+    srvr.send_P(200, text_javascript, bootstrap_bundle_min_js, 23000); });
   srvr.on("/validate-forms.js", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.send_P(200, text_javascript, validate_forms_js); });
+    srvr.sendHeader("Content-Encoding", "gzip");
+    srvr.send_P(200, text_javascript, validate_forms_js, 383); });
 
   srvr.on("/ping", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.send(200, "text/plain", "pong"); });
   srvr.on("/discoverCameras", handleDiscoverCameras);
   srvr.on("/save", handleSave);
-  srvr.on("/saveold", handleSaveOld);
   srvr.on("/restart", handleRestartAndWait);
   srvr.on("/logData", handleLogData);
-  /*
 
  // TODO Rethink these -- should be able to do this all in software automatically
  // create a UI for the joystick visually with deadzone
+   /*
  server.on("/center", HTTP_GET, [](AsyncWebServerRequest* request) {
    calibrateCenter();
    request->send(200, "text/html", "<h1>Calibration complete...</h1>"); });
