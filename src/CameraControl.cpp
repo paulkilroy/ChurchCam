@@ -16,7 +16,7 @@ WebSocketServer webSocketServer { 3000 };
 #define TILT_SPEED_MAX 15
 #define ZOOM_SPEED_MAX 7
 
-#define ANALOG_RESOLUTION 11
+#define ANALOG_RESOLUTION 12
 int AnalogMax = pow(2, ANALOG_RESOLUTION) - 1;
 #define IS_ACTIVE(X) ((X > AnalogMax/2*.85) && (X < AnalogMax/2*1.15))
 
@@ -57,21 +57,19 @@ void cameraControlSetup() {
 
   // Draw the inital screen once
   displayLoop(0, 0, 0, 0, 0, 0);
-
-
 }
 
 void setupDefaults() {
   if ( FirstTimeSetup ) {
     Serial.printf("AnalogMax = %d\n", AnalogMax);
     settings.panMin = 0;
-    settings.panMid = 1024;//950;
+    settings.panMid = AnalogMax/2;//950;
     settings.panMax = AnalogMax;
     settings.tiltMin = 0;
-    settings.tiltMid = 1024;//950;
+    settings.tiltMid = AnalogMax/2;//950;
     settings.tiltMax = AnalogMax;
     settings.zoomMin = 0;
-    settings.zoomMid = 1024;//950;
+    settings.zoomMid = AnalogMax/2;//950;
     settings.zoomMax = AnalogMax;
   }
 }
@@ -278,9 +276,12 @@ void cameraControlLoop() {
   int tilt = analogRead(PIN_TILT);
   int zoom = analogRead(PIN_ZOOM);
 
-  int panSpeed = mapOffset(pan, settings.panMin, settings.panMid, settings.panMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
-  int tiltSpeed = -1*mapOffset(tilt, settings.tiltMin, settings.tiltMid, settings.tiltMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
-  int zoomSpeed = mapOffset(zoom, settings.zoomMin, settings.zoomMid, settings.zoomMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
+  //int panSpeed = mapOffset(pan, settings.panMin, settings.panMid, settings.panMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
+  //int tiltSpeed = -1*mapOffset(tilt, settings.tiltMin, settings.tiltMid, settings.tiltMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
+  //int zoomSpeed = mapOffset(zoom, settings.zoomMin, settings.zoomMid, settings.zoomMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
+  int panSpeed = mapOffset(pan, 0, AnalogMax/2, AnalogMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
+  int tiltSpeed = -1*mapOffset(tilt, 0, AnalogMax/2, AnalogMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
+  int zoomSpeed = mapOffset(zoom, 0, AnalogMax/2, AnalogMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
   if ( panSpeed != 0 || tiltSpeed != 0 || zoomSpeed != 0 ) {
     //printf("%d %d %d :: %d %d %d\n", pan, tilt, zoom, panSpeed, tiltSpeed, zoomSpeed);
   }

@@ -62,11 +62,11 @@
     ATEMCameras = [
       { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "protocol": "1", "headers": "0" },
       { "id": "1", "status": "up", "name": "Camera 2", "ip": "10.0.4.62", "port": "60578", "protocol": "0", "headers": "1" },
-      { "id": "2", "status": "off", "name": "H2R", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" },
-      { "id": "3", "status": "off", "name": "AV PC", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" },
-      { "id": "4", "status": "off", "name": "Cam5", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" },
-      { "id": "5", "status": "off", "name": "Cam6", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" },
-      { "id": "6", "status": "up", "name": "Tracker", "ip": "10.0.4.171", "port": "5678", "protocol": "2", "headers": "0" },
+      { "id": "2", "status": "off", "name": "H2R", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
+      { "id": "3", "status": "off", "name": "AV PC", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
+      { "id": "4", "status": "off", "name": "Cam5", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
+      { "id": "5", "status": "off", "name": "Cam6", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
+      { "id": "6", "status": "up", "name": "Tracker", "ip": "10.0.4.171", "port": "5678", "protocol": "1", "headers": "0" },
       { "id": "7", "status": "off", "name": "Cam8", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" }
     ];
     DiscoveredCameras = [
@@ -187,14 +187,16 @@
         let clone = template.cloneNode(true);
         clone.id = "camConfig" + i;
         template.parentNode.appendChild(clone);
-        document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].name = "camConfigToggle" + i;
+        // document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].name = "camConfigToggle" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].name = "camConfigName" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigProtocol")[0].name = "camConfigProtocol" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].name = "camConfigIP" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].name = "camConfigPort" + i;
+        // document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].id = "camConfigToggle" + i;
 
-        document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].id = "camConfigToggle" + i;
-        // TODO do I need to call the toggle javascript?
+        // ?? need to save and restore the toggle, then select the toggle as clicked
+        // ?? What should the checkmark do? remove it from the status page?
+        // or should I jsut get rid of the checkmark and simplify things (yes)
         document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].id = "camConfigName" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigProtocol")[0].id = "camConfigProtocol" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].id = "camConfigIP" + i;
@@ -270,6 +272,7 @@
         DiscoveredCameras = await response.json();
         console.log(DiscoveredCameras);
       }
+      //document.getElementById('discoverModal').
       $('#discoverModal').modal('show');
       drawDiscoveredCameras();
       btn.disabled = false;
@@ -665,14 +668,16 @@
                 <div class="container-full px-0">
                   <!-- Working Template -->
                   <div id="camConfig" class="input-group mb-3 mx-0 row">
+                    <!--
                     <div class="input-group-text col-md-auto col-auto">
                       <input name="camConfigToggle" class="form-check-input mt-0" type="checkbox" id="camConfigToggle"
                         onclick="toggleCam(this)" checked>
                     </div>
+                  -->
                     <div id="camConfigName" class="input-group-text flex-grow-1 col-md-3 col-6" id="basic-addon1">CAM1
                       [ATEM In1]</div>
-                    <div class="col-md-2 col-4 px-0">
-                      <select name="camConfigProtocol" class="form-select" id="camConfigProtocol" required>
+                    <div class="col-md-3 col-5 px-0">
+                      <select name="camConfigProtocol" class="form-select" id="camConfigProtocol"> <!-- required -->
                         <option value="" selected>Protocol</option>
                         <option value="0">VISCA UDP</option>
                         <option value="1">VISCA TCP</option>
@@ -735,7 +740,7 @@
                   </div>
                   <div id="joystickContainer">
                     <div id="joystickDeadZone">
-                      <input id="axisPan" type="range" class="form-range align-bottom" min="0" max="2047">
+                      <input id="axisPan" type="range" class="form-range align-bottom" min="0" max="4096">
                     </div>
                   </div>
                   <div class="row">
@@ -746,7 +751,7 @@
                   </div>
                   <div id="joystickContainer">
                     <div id="joystickDeadZone">
-                      <input id="axisTilt" type="range" class="form-range align-bottom" min="0" max="2047">
+                      <input id="axisTilt" type="range" class="form-range align-bottom" min="0" max="4096">
                     </div>
                   </div>
                   <div class="row">
@@ -757,7 +762,7 @@
                   </div>
                   <div id="joystickContainer">
                     <div id="joystickDeadZone">
-                      <input id="axisZoom" type="range" class="form-range align-bottom" min="0" max="2047">
+                      <input id="axisZoom" type="range" class="form-range align-bottom" min="0" max="4096">
                     </div>
                   </div>
                 </span>

@@ -7,6 +7,8 @@
 #include <ETH.h>
 
 #include "globals.h"
+bool DebugDisplay = false;
+
 
 /*
   U8g2lib Example Overview:
@@ -164,6 +166,12 @@ void displaySetup() {
   }
 
   u8g2->begin();
+
+
+  // If Override is pressed on startup (here) do into debug mode on the display
+  if( overridePreview() ) {
+    DebugDisplay = true;
+  }
 }
 
 void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int zoomSpeed) {
@@ -173,8 +181,7 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
 
   u8g2->setFont(PT_FONT_10);
 
-  bool debug = false;
-  if ( debug ) {
+  if ( DebugDisplay ) {
     u8g2->drawStr(0, 8, getLogItem(5).buf);
     u8g2->drawStr(0, 19, getLogItem(4).buf);
     u8g2->drawStr(0, 30, getLogItem(3).buf);

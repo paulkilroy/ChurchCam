@@ -72,7 +72,9 @@ struct Pinouts_S {
 
 //Define sturct for holding PTZ settings (mostly to simplify EEPROM read and write, in order to persist settings)
 struct Settings {
-  char ptzName[32];
+  char ssid[32];
+  char psk[32];
+
   bool staticIP;
   IPAddress staticIPAddr;
   IPAddress staticSubnetMask;
@@ -126,6 +128,10 @@ extern const char bootstrap_bundle_min_js PROGMEM[];
 extern const char bootstrap_min_css PROGMEM[];
 extern const char headers_css PROGMEM[];
 extern const char validate_forms_js PROGMEM[];
+extern const size_t bootstrap_bundle_min_js_bytes;
+extern const size_t bootstrap_min_css_bytes;
+extern const size_t headers_css_bytes;
+extern const size_t validate_forms_js_bytes;
 
 // Extern functions
 /*
@@ -147,6 +153,7 @@ bool ethUp();
 bool wifiUp();
 bool hotspotUp();
 String getSSID();
+String getPSK();
 bool networkUp();
 const char* getHostname();
 IPAddress localIP();
@@ -171,6 +178,7 @@ void webLoop();
 int discoverCameras();
 String discoveredCameraName(int i);
 IPAddress discoveredCameraIP(int i);
+boolean overridePreview();
 
 
 int connect( int cameraNumber );

@@ -9,7 +9,7 @@
 #include <EEPROM.h>
 #include <ATEMmin.h>
 
-/* New Design
+/* TODO New Design
 -------------
 ChurchCam - Main loop of getting state and passing it through the loops for each file
     -Get joystick pos, button presses, network state, sim state(?)
@@ -33,7 +33,7 @@ bool InSimulator = false;
 struct Pinouts_S Pinouts[REV_MODELS]{
   //                   T.  P.  Z. B1. B2. B3 LED RST SLC SDA
   { "DOIT DevKit V1", 34, 35, 32, 14, 12, 13, 2, 255, 22, 21 },
-  { "OMILEX POE",     35, 33, 36,  1,  3, 5,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
+  { "OMILEX POE",     35, 33, 36,  32,  14, 5,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
   { "WT32-ETH01",     39, 36, 35, 2,  15, 14, 0, 255, 32, 33 },
   { "Heltec WiFi Kit",36, 37, 38, 23, 19, 22, 25, 16, 15, 4 }
 
@@ -202,6 +202,7 @@ void WiFiEvent(WiFiEvent_t event) {
       break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
       logi("%d WIFI_AP_STACONNECTED", WiFi.getStatusBits());
+      networkSetup("AP_STACONNECTED");
       break;
     case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
       logi("%d WIFI_AP_STADISCONNECTED", WiFi.getStatusBits());
@@ -221,7 +222,7 @@ void setup() {
     size_t l = Serial.write("hi\n");
     Serial.printf("delaying startup: %d -- %d\n", i, l);
   }*/
-  delay(5000);
+  delay(1000);
 
   logi("######################## Serial Started");
 
@@ -241,7 +242,7 @@ void setup() {
   if (settings.staticIP && settings.staticIPAddr[0] != 255) {
     logi("Configuring static IP: %s", settings.staticIPAddr.toString());
     WiFi.config(settings.staticIPAddr, settings.staticGateway, settings.staticSubnetMask);
-    // TODO Do I need to add ETH.config() here too?
+    // TODO BUG need to add ETH.config() here too?
   } else if (settings.staticIP && settings.staticIPAddr[0] == 255) {
     // This is the first time through.. initialize settings to all 0's instead of 255's
     // memset(&settings, 0, sizeof(settings));
@@ -252,7 +253,6 @@ void setup() {
 
   cameraControlSetup();
 
-
   // onEvent needs to be the first thing so we can trigger actions off of WiFi Events
   WiFi.onEvent(WiFiEvent);
 
@@ -260,17 +260,19 @@ void setup() {
     logi("Starting ETH");
     ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER);
     ETH.setHostname(AP_SSID);
-    delay(1000);
+    delay(100);
 
-    // Put WiFi into station mode and make it connect to saved network
-    // movedup WiFi.mode(WIFI_STA);
-    logi("Attempting connection to WiFi Network name (SSID): [%d]", getSSID());
-    WiFi.begin();
-
-    delay(1000); // Wait to stabalize so I get the ETH_IP event
-
-    // Debug this -- ETH.begin() causes ARDUINO_EVENT_AP_STADISCONNECTED which
-    // causes a 4 second delay for some reason.
+    if( getSSID() == "" ) {
+      logi("Starting AP");
+      WiFi.softAP(AP_SSID);
+      WiFi.mode(WIFI_AP);
+    } else {
+      // Put WiFi into station mode and make it connect to saved network
+      logi("Attempting connection to WiFi Network name (SSID): [%d]", getSSID());
+      WiFi.mode(WIFI_STA);
+      WiFi.begin();
+    }
+    delay(100); // Wait to stabalize so I get the ETH_IP event
 
   } else {
     WiFi.begin("Wokwi-GUEST", "", 6);
@@ -289,9 +291,12 @@ void loop() {
 
   webLoop();
 }
-
 String getSSID() {
-  return WiFi.SSID();
+  return settings.ssid;
+}
+
+String getPSK() {
+  return settings.psk;
 }
 
 bool ethUp() {
@@ -307,7 +312,7 @@ bool hotspotUp() {
 }
 
 bool networkUp() {
-  return ethUp() || wifiUp();
+  return ethUp() || wifiUp() || hotspotUp();
 }
 
 const char* getHostname() {

@@ -12,9 +12,6 @@
 WebServer srvr(80);
 String RestartMsg = "";
 bool Restart = false;
-bool ResetWiFi = false;
-String ResetWiFiSSID = "";
-String ResetWiFiPSK = "";
 
 String processor(const String& var) {
   String serverVars = "";
@@ -106,8 +103,8 @@ String processor(const String& var) {
   else if ( var == "STATIC_SUBNET_MASK" ) return settings.staticSubnetMask.toString();
   else if ( var == "STATIC_GATEWAY" ) return settings.staticGateway.toString();
   else if ( var == "ATEM_IP_ADDR" ) return settings.switcherIP.toString();
-  else if ( var == "SSID" ) return WiFi.SSID();
-  else if ( var == "PSK" ) return WiFi.psk();
+  else if ( var == "SSID" ) return getSSID();
+  else if ( var == "PSK" ) return getPSK();
   else if ( var == "BOARD_NAME" ) return Pinouts[HWRev].name;
   else if ( var == "RESTART_MSG" ) return RestartMsg;
 
@@ -368,9 +365,9 @@ void handleSave() {
     // Serial.printf("name: %s - %s\n", var.c_str(), val.c_str());
 
     if ( var == "networkName" ) {
-      ResetWiFiSSID = String(val);
+      strcpy(settings.ssid, val.c_str());
     } else if ( var == "networkPassword" ) {
-      ResetWiFiPSK = String(val);
+      strcpy(settings.psk, val.c_str());
     } else if ( var == "staticIP" ) {
       settings.staticIP = ( val == "true" );
     } else if ( var == "staticIPAddr" ) {
@@ -409,7 +406,6 @@ void handleSave() {
     EEPROM.commit();
   }
 
-  ResetWiFi = true;
   RestartMsg = "Successfully updated settings.";
   handleRestartAndWait();
 }
@@ -429,7 +425,7 @@ void handleSaveOld() {
       // Serial.printf("name: %s - %s\n", var, val);
 
       if ( var == "ptzName" ) {
-        val.toCharArray(settings.ptzName, (uint8_t)32);
+        //val.toCharArray(settings.ptzName, (uint8_t)32);
       } else if ( var == "ssid" ) {
         ssid = String(val);
       } else if ( var == "pwd" ) {
@@ -548,28 +544,27 @@ void webSetup() {
   // Initialize and begin HTTP server for handeling the web interface
   srvr.on("/", handleRoot);
 
-  // Let the browser cache these
-  // TODO Don't hardcode sizes here
+  // Send these out as binary gziped files and let the browser cache these
   srvr.on("/bootstrap.min.css", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_css, bootstrap_min_css, 23718); });
+    srvr.send_P(200, text_css, bootstrap_min_css, bootstrap_min_css_bytes); });
   srvr.on("/headers.css", []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_css, headers_css, 311); });
+    srvr.send_P(200, text_css, headers_css, headers_css_bytes); });
   srvr.on("/bootstrap.bundle.min.js", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_javascript, bootstrap_bundle_min_js, 23000); });
+    srvr.send_P(200, text_javascript, bootstrap_bundle_min_js, bootstrap_bundle_min_js_bytes); });
   srvr.on("/validate-forms.js", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
     srvr.sendHeader("Cache-Control", "public, max-age=2678400");
     srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_javascript, validate_forms_js, 383); });
+    srvr.send_P(200, text_javascript, validate_forms_js, validate_forms_js_bytes); });
 
   srvr.on("/ping", HTTP_GET, []() {
     logi("web request for: %s", srvr.uri().c_str());
@@ -638,18 +633,6 @@ void webLoop() {
   if ( networkUp() )
     srvr.handleClient();
 
-  if ( ResetWiFi ) {
-    Serial.println("LOOP - Resetting WiFi");
-    WiFi.mode(WIFI_STA);
-    delay(100); // Give it time to switch over to STA mode (this is important on the ESP32 at least)
-
-    WiFi.persistent(true); // Needed by ESP8266
-    // Pass in 'false' as 5th (connect) argument so we don't waste time trying to connect, just save the new SSID/PSK
-    // 3rd argument is channel - '0' is default. 4th argument is BSSID - 'NULL' is default.
-    WiFi.begin(ResetWiFiSSID.c_str(), ResetWiFiPSK.c_str(), 0, NULL, false);
-    delay(100);
-    Serial.println("LOOP - Async WiFi.begin() stored ssid/psk");
-  }
   if ( Restart ) {
     // gracefully shutdown
     Serial.println("LOOP - shutting down");
