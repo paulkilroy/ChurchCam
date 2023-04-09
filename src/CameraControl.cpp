@@ -12,7 +12,6 @@ WebSocketServer webSocketServer { 3000 };
 // If you want to slow down the camera movement just change these from the visca standards below
 // 18 is the VISCA max -- too fast
 #define PAN_SPEED_MAX 15
-// 17 is the VISCA max -- too fast
 #define TILT_SPEED_MAX 15
 #define ZOOM_SPEED_MAX 7
 
@@ -210,7 +209,7 @@ long translate(long value, long leftMin, long leftMax, long rightMin, long right
 */
 
 int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, long rightMax) {
-  int th = ( leftMax - leftMin ) * .1;
+  int th = ( leftMax - leftMin ) * THRESHOLD;
   int midEdgeMax = mid + th;
   int midEdgeMin = mid - th;
 
