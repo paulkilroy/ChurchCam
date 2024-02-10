@@ -164,9 +164,7 @@ void displaySetup() {
   } else {
     u8g2 = new U8G2_SSD1306_128X64_NONAME_F_HW_I2C(U8G2_R0, U8X8_PIN_NONE, PIN_CLOCK, PIN_DATA);
   }
-
   u8g2->begin();
-
 
   // If Override is pressed on startup (here) go into debug mode on the display
   if( overridePreview() ) {
@@ -180,7 +178,6 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
   u8g2->clearBuffer();
 
   u8g2->setFont(PT_FONT_10);
-
   if ( DebugDisplay ) {
     u8g2->drawStr(0, 8, getLogItem(5).buf);
     u8g2->drawStr(0, 19, getLogItem(4).buf);
@@ -191,8 +188,6 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
     u8g2->sendBuffer();
     return;
   }
-
-  //u8g2->setTextAlignment(TEXT_ALIGN_LEFT);
 
   String l1, l2;
   if ( wifiUp() ) {
@@ -213,7 +208,6 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
     l1 = AP_SSID;
     l2 = WiFi.softAPIP().toString();
   }
-  // 64 was 51
   u8g2->drawStrCenter(64, 10, l1.c_str());
   u8g2->drawStrCenter(64, 21, l2.c_str());
 
