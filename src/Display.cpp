@@ -168,7 +168,7 @@ void displaySetup() {
   u8g2->begin();
 
 
-  // If Override is pressed on startup (here) do into debug mode on the display
+  // If Override is pressed on startup (here) go into debug mode on the display
   if( overridePreview() ) {
     DebugDisplay = true;
   }

@@ -20,7 +20,7 @@ int AnalogMax = pow(2, ANALOG_RESOLUTION) - 1;
 #define IS_ACTIVE(X) ((X > AnalogMax/2*.85) && (X < AnalogMax/2*1.15))
 
 // int NoJoystick = 1;  // Just in case
-unsigned long LastSend = 0;
+unsigned long LastSendTime = 0;
 #define MAX_SEND 100  // Do not send a PTZ message more than every 100ms, unless its a stop
 
 void cameraControlSetup() {
@@ -127,7 +127,6 @@ void buttonLoop() {
 }
 
 void cameraControlLoop() {
-  buttonLoop();
   webSocketServer.listen();
 
   int pan = analogRead(PIN_PAN);
@@ -137,17 +136,15 @@ void cameraControlLoop() {
   int panSpeed = mapOffset(pan, 0, AnalogMax/2, AnalogMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
   int tiltSpeed = -1*mapOffset(tilt, 0, AnalogMax/2, AnalogMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
   int zoomSpeed = mapOffset(zoom, 0, AnalogMax/2, AnalogMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
-  if ( panSpeed != 0 || tiltSpeed != 0 || zoomSpeed != 0 ) {
-    //printf("%d %d %d :: %d %d %d\n", pan, tilt, zoom, panSpeed, tiltSpeed, zoomSpeed);
-  }
 
-  unsigned long curr = millis();
-  if ( ( panSpeed == 0 && tiltSpeed == 0 && zoomSpeed == 0 ) || ( curr > LastSend + MAX_SEND ) ) {
-    displayLoop(pan, tilt, zoom, panSpeed, tiltSpeed, zoomSpeed);
+  unsigned long currentSendTime = millis();
+  // the last part of this if statement inserts a bit of delay if needed before sending the next command
+  // only once MAX_SEND ms -- 100ms max
+  if ( ( panSpeed == 0 && tiltSpeed == 0 && zoomSpeed == 0 ) || ( currentSendTime > LastSendTime + MAX_SEND ) ) {
     // TODO Separate out panTilt and zoom, then put repeate check by message type in 
     // the visca send function
     ptzDrive(panSpeed, tiltSpeed, zoomSpeed);
-    LastSend = curr;
+    LastSendTime = currentSendTime;
     char msg[256];
     sprintf(msg, "{ \"pan\": \"%d\", \"viscaPan\": \"%d\", "
       "\"tilt\": \"%d\", \"viscaTilt\": \"%d\", "
@@ -155,4 +152,7 @@ void cameraControlLoop() {
       ,pan, panSpeed, tilt, tiltSpeed, zoom, zoomSpeed);
     webSocketServer.broadcast(WebSocket::DataType::TEXT, msg, strlen(msg));
   }
+
+  buttonLoop();
+  displayLoop(pan, tilt, zoom, panSpeed, tiltSpeed, zoomSpeed);
 }
