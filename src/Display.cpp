@@ -197,11 +197,11 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
   String l1, l2;
   if ( wifiUp() ) {
     u8g2->drawXBM(0, 2, wifi_width, wifi_height, wifi_bits);
-    l1 = "/" + String(getHostname());
+    l1 = String(getHostname());
     l2 = localIP().toString();
   } else if ( ethUp() ) {
     u8g2->drawXBM(0, 2, eth_width, eth_height, eth_bits);
-    l1 = "/" + String(getHostname());
+    l1 = String(getHostname());
     l2 = localIP().toString();
   } else if ( hotspotUp() ) {  // only if in sta mode
     u8g2->drawXBM(0, 2, ap_width, ap_height, ap_bits);
@@ -237,7 +237,7 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
   } else {
     u8g2->setFont(PT_FONT_10);
     u8g2->drawStr(0, 52, "1- Connect WiFi to " AP_SSID);
-    u8g2->drawStr(0, 63, "2- Open browser to IP");
+    u8g2->drawStr(0, 63, "2- Open browser to IP above");
   }
 
   u8g2->drawLine(0, 25, DISPLAY_WIDTH, 25);

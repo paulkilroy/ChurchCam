@@ -268,9 +268,9 @@ void setup() {
       WiFi.mode(WIFI_AP);
     } else {
       // Put WiFi into station mode and make it connect to saved network
-      logi("Attempting connection to WiFi Network name (SSID): [%d]", getSSID());
+      logi("Attempting connection to WiFi Network name (SSID): [%s]", getSSID().c_str());
       WiFi.mode(WIFI_STA);
-      WiFi.begin();
+      WiFi.begin( getSSID().c_str(), getPSK().c_str() );
     }
     delay(100); // Wait to stabalize so I get the ETH_IP event
 

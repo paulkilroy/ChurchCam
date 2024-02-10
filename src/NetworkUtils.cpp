@@ -33,9 +33,9 @@ void printBytes(byte array[], unsigned int len) {
 
 String stringBytes(byte array[], unsigned int len) {
   int b = 0;
-  char buffer[1024];
+  char buffer[250];
 
-  for (unsigned int i = 0; i < len; i++)
+  for (unsigned int i = 0; i < len && b < 245; i++)
   {
     byte nib1 = (array[i] >> 4) & 0x0F;
     byte nib2 = (array[i] >> 0) & 0x0F;
