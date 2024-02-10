@@ -62,13 +62,13 @@ void setupDefaults() {
   if ( FirstTimeSetup ) {
     Serial.printf("AnalogMax = %d\n", AnalogMax);
     settings.panMin = 0;
-    settings.panMid = AnalogMax/2;//950;
+    settings.panMid = AnalogMax/2;
     settings.panMax = AnalogMax;
     settings.tiltMin = 0;
-    settings.tiltMid = AnalogMax/2;//950;
+    settings.tiltMid = AnalogMax/2;
     settings.tiltMax = AnalogMax;
     settings.zoomMin = 0;
-    settings.zoomMid = AnalogMax/2;//950;
+    settings.zoomMid = AnalogMax/2;
     settings.zoomMax = AnalogMax;
   }
 }
@@ -96,118 +96,6 @@ int getActiveCamera() {
   }
 }
 
-void calibrateCenter() {
-  String instruction = "Center Joystick";
-  displayCalibrateScreen(instruction, 0, 0, 0, 0);
-
-  // Run for a whole minute
-  for ( int i = 0; i < 2000; i++ ) {
-    int p = analogRead(PIN_PAN);
-    int t = analogRead(PIN_TILT);
-    int z = analogRead(PIN_ZOOM);
-
-    Serial.printf("Mid: %d: %d - %d - %d\n", i, p, t, z);
-    displayCalibrateScreen(instruction, i / 20, p, t, z);
-    delay(30);
-  }
-}
-
-void autoCalibrate() {
-  String instruction = "Center Joystick";
-  displayCalibrateScreen(instruction, 0, 0, 0, 0);
-
-  // listen for 3 seconds takings readings ever 10ms and average
-  int panInt = 0;
-  int tiltInt = 0;
-  int zoomInt = 0;
-  for ( int i = 0; i < 100; i++ ) {
-    int p = analogRead(PIN_PAN);
-    int t = analogRead(PIN_TILT);
-    int z = analogRead(PIN_ZOOM);
-    panInt += p;
-    tiltInt += t;
-    zoomInt += z;
-    Serial.printf("Mid: %d: %d - %d - %d\n", i, p, t, z);
-    displayCalibrateScreen(instruction, i, p, t, z);
-    delay(30);
-  }
-  settings.panMid = (uint16_t)( panInt / 100 );
-  settings.tiltMid = (uint16_t)( tiltInt / 100 );
-  settings.zoomMid = (uint16_t)( zoomInt / 100 );
-  Serial.printf("panMid: %d tiltMid: %d zoomMid: %d\n", settings.panMid, settings.tiltMid, settings.zoomMid);
-
-  // Change display line 2 to "Keep joystick in lower right for 3 seconds"
-  instruction = "Lower Right";
-  // listen for 3 seconds aking readings every 10ms and take the max X and Y (or Min Y?)
-  uint16_t pan = 0;
-  uint16_t tilt = 0;
-  for ( int i = 0; i < 100; i++ ) {
-    pan = max(pan, analogRead(PIN_PAN));
-    tilt = max(tilt, analogRead(PIN_TILT));
-    displayCalibrateScreen(instruction, i, pan, tilt, 0);
-    delay(30);
-  }
-  settings.panMax = pan;
-  settings.tiltMax = tilt;
-  Serial.printf("panMax: %d tiltMax: %d \n", settings.panMax, settings.tiltMax);
-
-  // Change display line 2 to "Keep joystick in upper left for 3 seconds"
-  instruction = "Upper Left";
-  pan = UINT16_MAX;
-  tilt = UINT16_MAX;
-  for ( int i = 0; i < 100; i++ ) {
-    pan = min(pan, analogRead(PIN_PAN));
-    tilt = min(tilt, analogRead(PIN_TILT));
-    displayCalibrateScreen(instruction, i, pan, tilt, 0);
-    delay(30);
-  }
-  settings.panMin = pan;
-  settings.tiltMin = tilt;
-  Serial.printf("panMin: %d tiltMin: %d \n", settings.panMin, settings.tiltMin);
-
-  instruction = "Zoom In";
-  uint16_t zoom = 0;
-  for ( int i = 0; i < 100; i++ ) {
-    zoom = max(zoom, analogRead(PIN_ZOOM));
-    displayCalibrateScreen(instruction, i, 0, 0, zoom);
-    delay(30);
-  }
-  settings.zoomMax = zoom;
-  Serial.printf("zoomMax: %d\n", settings.zoomMax);
-
-  instruction = "Zoom Out";
-  zoom = UINT16_MAX;
-  for ( int i = 0; i < 100; i++ ) {
-    zoom = min(zoom, analogRead(PIN_ZOOM));
-    displayCalibrateScreen(instruction, i, 0, 0, zoom);
-    delay(30);
-  }
-  settings.zoomMin = zoom;
-  Serial.printf("zoomMin: %d\n", settings.zoomMin);
-
-  // Store in settings and save them
-  EEPROM.put(0, settings);
-  EEPROM.commit();
-}
-
-/*
-long map2(long x, long in_min, long in_max, long out_min, long out_max) {
-  return ( x - in_min ) * ( out_max - out_min ) / ( in_max - in_min ) + out_min;
-}
-
-long translate(long value, long leftMin, long leftMax, long rightMin, long rightMax) {
-  // Figure out how 'wide' each range is
-  long leftSpan = leftMax - leftMin;
-  long rightSpan = rightMax - rightMin;
-
-  // Convert the left range into a 0-1 range (float)
-  float valueScaled = (float)( value - leftMin ) / (float)( leftSpan );
-
-  // Convert the 0-1 range into a value in the right range.
-  return rightMin + ( valueScaled * rightSpan );
-}
-*/
-
 int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, long rightMax) {
   int th = ( leftMax - leftMin ) * THRESHOLD;
   int midEdgeMax = mid + th;
@@ -219,35 +107,6 @@ int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, l
 
   return -100;
 }
-/*
-int mapOffset(int input, int in_min, int in_mid, int in_max, int out_min, int out_max) {
-  int in_threshold = ( in_max - in_min ) * THRESHOLD;  // 10% dead zone on each side
-
-  //Serial.printf("input: %d in_min: %d in_mid: %d in_max: %d in_threshold: %d\n", input, in_min, in_mid, in_max, in_threshold);
-  delay(1000);
-  if ( input > (in_mid - in_threshold) && input < ( in_mid + in_threshold ) ) {
-    //Serial.println("ignoring");
-    return 0;
-  } else if ( input > in_mid ) {
-    return translate(input, in_mid + in_threshold, in_max, 1, out_max);
-  } else {
-    Serial.printf("input: %d in_min: %d in_mid-in_threshold: %d -1*out_max: %d -1: -1 == %ld\n", input, in_min, in_mid - in_threshold, -1 * out_max, map(input, in_min, in_mid - in_threshold, -1 * out_max, -1));
-
-    int imin = in_min;
-    int imax = in_mid - in_threshold;
-    int omin = -1 * out_max;
-    int omax = -1;
-    Serial.printf("input: %d in_min: %d in_max: %d out_min: %d out_max: %d == result: %d\n",
-      input,
-      imin,
-      imax,
-      omin,
-      omax,
-      (int)translate(input, imin, imax, omin, omax));
-    return translate(input, in_min, in_mid - in_threshold, -1 * out_max, -1);
-  }
-}
-*/
 
 void buttonLoop() {
   if ( digitalRead(PIN_RECALL_1) == LOW && digitalRead(PIN_RECALL_2) == LOW ) {
@@ -275,9 +134,6 @@ void cameraControlLoop() {
   int tilt = analogRead(PIN_TILT);
   int zoom = analogRead(PIN_ZOOM);
 
-  //int panSpeed = mapOffset(pan, settings.panMin, settings.panMid, settings.panMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
-  //int tiltSpeed = -1*mapOffset(tilt, settings.tiltMin, settings.tiltMid, settings.tiltMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
-  //int zoomSpeed = mapOffset(zoom, settings.zoomMin, settings.zoomMid, settings.zoomMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
   int panSpeed = mapOffset(pan, 0, AnalogMax/2, AnalogMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
   int tiltSpeed = -1*mapOffset(tilt, 0, AnalogMax/2, AnalogMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
   int zoomSpeed = mapOffset(zoom, 0, AnalogMax/2, AnalogMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);

@@ -258,24 +258,6 @@ void drawBoolean(int x, int y, int sz, boolean value) {
   }
 }
 
-void displayCalibrateScreen(String direction, int pct, int p, int t, int z) {
-  u8g2->clearBuffer();
-  u8g2->setFont(PT_FONT_16);
-  //u8g2->setTextAlignment(TEXT_ALIGN_CENTER);
-  u8g2->drawStrCenter(DISPLAY_WIDTH / 2, 16, direction.c_str());
-
-  u8g2->drawLine(0, 30, DISPLAY_WIDTH, 30);
-
-  u8g2->drawLine(DISPLAY_WIDTH / 2, 24, DISPLAY_WIDTH / 2, 30);
-  ;
-  drawCenter("P", p);
-  drawCenter("T", t);
-  drawCenter("Z", z);
-
-  // u8g2->drawProgressBar(0, DISPLAY_HEIGHT - 11, 120, 10, pct);
-  u8g2->sendBuffer();
-}
-
 void drawButton1() {
   u8g2->drawDisc(DISPLAY_WIDTH - 15, 31, 3);
   u8g2->sendBuffer();
