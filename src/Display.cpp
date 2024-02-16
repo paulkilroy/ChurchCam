@@ -1,86 +1,14 @@
 // https://github.com/ThingPulse/esp8266-oled-ssd1306
 
 #include <Arduino.h>
-#include <U8g2lib.h>
+#include <Arduino_GFX_Library.h>
+#include <canvas/Arduino_Canvas.h>
 #include <Wire.h>
 #include <WiFi.h>
 #include <ETH.h>
 
 #include "globals.h"
 bool DebugDisplay = false;
-
-
-/*
-  U8g2lib Example Overview:
-    Frame Buffer Examples: clearBuffer/sendBuffer. Fast, but may not work with all Arduino boards because of RAM consumption
-    Page Buffer Examples: firstPage/nextPage. Less RAM usage, should work with all Arduino boards.
-    U8x8 Text Only Example: No RAM usage, direct communication with display controller. No graphics, 8x8 Text only.
-
-*/
-
-// Please UNCOMMENT one of the contructor lines below
-// U8g2 Contructor List (Frame Buffer)
-// The complete list is available here: https://github.com/olikraus/u8g2/wiki/u8g2setupcpp
-// Please update the pin numbers according to your setup. Use U8X8_PIN_NONE if the reset pin is not connected
-
-U8G2* u8g2;
-
-// Heltec Wifi Kit 32
-//U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, 16, 15, 4);
-
-// AliExpress SH1106 1.3" OLED
-// PK U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
-
-// NOTE These must be XBM not BMP format..
-
-/*
-#define ptz_setup_width 64
-#define ptz_setup_height 64
-const unsigned char ptz_setup_bits[] = {
-  0xFF, 0xFF, 0x73, 0x80, 0x71, 0xC6, 0xFF, 0xFF, 0xFF, 0xFF, 0x63, 0x80,
-  0x33, 0xCE, 0xFF, 0xFF, 0x9F, 0xDD, 0x63, 0xDA, 0x23, 0xC4, 0x9D, 0xED,
-  0x03, 0x80, 0x83, 0xFF, 0x01, 0xC0, 0x01, 0xE0, 0x07, 0x80, 0x83, 0xFF,
-  0x01, 0xC0, 0x01, 0xC0, 0xE3, 0x1F, 0xF3, 0x7F, 0x0E, 0xC6, 0xF1, 0xE7,
-  0xE7, 0x9F, 0xE3, 0x7F, 0x0E, 0xCE, 0xF8, 0xE7, 0xE7, 0x1F, 0xF3, 0x7F,
-  0x2E, 0xC7, 0xF9, 0xE7, 0xE3, 0x9F, 0xF3, 0x7F, 0xFE, 0xCF, 0xF9, 0xE7,
-  0xE7, 0x1F, 0xE3, 0x7F, 0xFE, 0xC7, 0xF8, 0xC7, 0xE3, 0x9F, 0x73, 0x02,
-  0xCE, 0xCF, 0xF9, 0xE7, 0xE7, 0x9F, 0x73, 0x00, 0xCE, 0xC7, 0xF9, 0xE7,
-  0xE7, 0x8F, 0x63, 0x00, 0x84, 0xCF, 0xF8, 0xE7, 0x03, 0x00, 0x03, 0x0C,
-  0x00, 0xCE, 0x01, 0xC0, 0x07, 0x80, 0x03, 0x0C, 0x00, 0xC6, 0x01, 0xE0,
-  0xDF, 0xB6, 0x63, 0x8E, 0x11, 0xCE, 0xDB, 0xF6, 0xFF, 0xFF, 0x63, 0x8C,
-  0x73, 0xCE, 0xFF, 0xFF, 0xFF, 0xFF, 0x73, 0x8E, 0x31, 0xC6, 0xFF, 0xFF,
-  0x00, 0x00, 0x00, 0x0C, 0xF0, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0E,
-  0xF0, 0x01, 0x00, 0x00, 0xAA, 0x01, 0x41, 0xBC, 0xE0, 0x11, 0x50, 0xC2,
-  0xFF, 0x83, 0x73, 0xFE, 0x81, 0x39, 0xF8, 0xC7, 0xFF, 0x83, 0x73, 0xFC,
-  0xC1, 0x31, 0xF8, 0xE7, 0x87, 0x7F, 0x60, 0xFE, 0x0F, 0x38, 0x06, 0xE0,
-  0x03, 0xFF, 0x60, 0xFC, 0x0F, 0x30, 0x0E, 0xE0, 0x83, 0x5F, 0x60, 0xFF,
-  0x07, 0x3A, 0x07, 0x82, 0xE0, 0x1F, 0x83, 0x7F, 0x00, 0x3E, 0x06, 0x07,
-  0xE0, 0x9F, 0x83, 0x7F, 0x00, 0x3E, 0x07, 0x07, 0x00, 0x00, 0x8C, 0x1F,
-  0xFE, 0x0F, 0xF8, 0x3F, 0x00, 0x00, 0x8C, 0x0F, 0xFE, 0x0F, 0xF8, 0x1F,
-  0x00, 0x00, 0x9D, 0x0F, 0xFE, 0x0F, 0xF8, 0x1F, 0xE0, 0x80, 0x83, 0x0F,
-  0xFE, 0xFF, 0xF9, 0x00, 0xE0, 0x80, 0x83, 0x0F, 0xFE, 0xFF, 0xF9, 0x00,
-  0x78, 0xF8, 0xE0, 0xF3, 0x61, 0xFE, 0xBF, 0x1F, 0xF8, 0x7C, 0xF0, 0xF3,
-  0x01, 0xFE, 0x3F, 0x3F, 0xFC, 0xF8, 0xF0, 0xE3, 0x01, 0xFE, 0x3F, 0x1E,
-  0x18, 0xE0, 0xE3, 0x81, 0x01, 0x00, 0xFF, 0x1F, 0x1C, 0xE0, 0xF3, 0x83,
-  0x01, 0x00, 0xFE, 0x3F, 0xAB, 0xA7, 0xF6, 0xF4, 0x31, 0xD0, 0xFF, 0x3D,
-  0xE3, 0x1F, 0x7C, 0xFE, 0x33, 0xF8, 0xFF, 0x18, 0xE3, 0x1F, 0x7C, 0xFE,
-  0x33, 0xF8, 0xFF, 0x39, 0xE0, 0xE0, 0x9F, 0x81, 0xCF, 0xFF, 0xFF, 0x07,
-  0xE0, 0xE0, 0x8F, 0x83, 0xCF, 0xFF, 0xFF, 0x07, 0x40, 0x60, 0xB5, 0x61,
-  0xCF, 0x5F, 0x7E, 0x05, 0x00, 0x00, 0x60, 0x70, 0x8E, 0x0F, 0x38, 0x18,
-  0x00, 0x00, 0x70, 0x30, 0xCC, 0x0F, 0x38, 0x38, 0xFF, 0xFF, 0x83, 0xCF,
-  0x73, 0xC6, 0xF8, 0xFF, 0xFF, 0xFF, 0x83, 0x8F, 0x31, 0xCE, 0xF9, 0xFF,
-  0xDF, 0xB6, 0x03, 0x9B, 0x21, 0x8E, 0xF8, 0xB7, 0x07, 0x80, 0x03, 0x70,
-  0x00, 0x0E, 0xF8, 0x00, 0x03, 0x80, 0x03, 0x70, 0x00, 0x06, 0xF8, 0x00,
-  0xE7, 0x1F, 0x83, 0x81, 0x31, 0xFE, 0xFF, 0xFF, 0xE7, 0x9F, 0x83, 0x83,
-  0x71, 0xFE, 0xFF, 0xFF, 0xE3, 0x0F, 0x83, 0x81, 0x31, 0xFE, 0xFF, 0xFF,
-  0xE7, 0x9F, 0x73, 0x70, 0x70, 0xFE, 0x39, 0xF8, 0xE7, 0x9F, 0x73, 0x70,
-  0x30, 0xFE, 0x38, 0xF8, 0xE3, 0x9F, 0xF3, 0xFF, 0x01, 0xD0, 0x3F, 0x38,
-  0xE7, 0x1F, 0xE3, 0xFF, 0x01, 0xC0, 0x3F, 0x38, 0xE7, 0x9F, 0xF3, 0xFF,
-  0x03, 0xC0, 0x3F, 0x18, 0x03, 0x80, 0x73, 0x8C, 0xCF, 0x01, 0x3F, 0x07,
-  0x07, 0x80, 0x73, 0x8E, 0xCF, 0x01, 0x3E, 0x07, 0xBF, 0xAB, 0x63, 0x8C,
-  0x5F, 0x10, 0x3E, 0x9F, 0xFF, 0xFF, 0x73, 0x0C, 0x3E, 0x30, 0x38, 0xFF,
-  0xFF, 0xFF, 0x73, 0x0E, 0x3E, 0x38, 0x38, 0xFF, };
-*/
 
 #define wifi_width 18
 #define wifi_height 17
@@ -130,41 +58,97 @@ const uint8_t cam_bits[] = {
   0x03, 0x60, 0x07, 0xff, 0x7f, 0x06, 0xfe, 0x3f, 0x00
 };
 
-#define DISPLAY_WIDTH u8g2->getDisplayWidth()
-#define DISPLAY_HEIGHT u8g2->getDisplayHeight()
+#define TFT_CS    14 // CS Grey 
+#define TFT_RST   4 // RES Dark Brown 
+#define TFT_DC    15 // RS Blue
 
-#define ALIGN_CENTER(x, t) ((x - (u8g2->getUTF8Width(t))) / 2)
-#define ALIGN_RIGHT(x, t) (x - u8g2->getUTF8Width(t))
-#define ALIGN_LEFT 0
-#define drawStrCenter(x, y, t) drawStr(x - u8g2->getUTF8Width(t) / 2, y, t)
+#define TFT_SCLK 16   // SCK White -- Baord says 18
+#define TFT_MOSI 13  // SDA Light Brown -- Board says 23
+
+#define TFT_BLK 2 // Backlit - Purple
+
+
+#define GFX_BL TFT_BLK // default backlight pin, you may replace DF_GFX_BL to actual backlight pin
+
+/* More dev device declaration: https://github.com/moononournation/Arduino_GFX/wiki/Dev-Device-Declaration */
+#if defined(DISPLAY_DEV_KIT)
+Arduino_GFX *gfx = create_default_Arduino_GFX();
+#else /* !defined(DISPLAY_DEV_KIT) */
+
+/* More data bus class: https://github.com/moononournation/Arduino_GFX/wiki/Data-Bus-Class */
+//Arduino_DataBus *bus = create_default_Arduino_DataBus();
+Arduino_DataBus *bus = new Arduino_SWSPI(TFT_DC /* DC */, TFT_CS/* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */);
+
+/* More display class: https://github.com/moononournation/Arduino_GFX/wiki/Display-Class */
+// Arduino_GFX *gfx = new Arduino_ILI9341(bus, DF_GFX_RST, 0 /* rotation */, false /* IPS */);
+Arduino_GFX *gfx;
+
+
+#endif /* !defined(DISPLAY_DEV_KIT) */
+/*******************************************************************************
+ * End of Arduino_GFX setting
+ ******************************************************************************/
 
 #define PT_FONT_10 u8g2_font_6x13_tf  // u8g2_font_7x14_tf
 #define PT_FONT_16 u8g2_font_logisoso16_tf // u8g2_font_crox5t_tr
 
-void drawCenter(String v, int x, boolean bold = false) {
-  x = DISPLAY_WIDTH * x / AnalogMax;
-  u8g2->drawLine(x, 28, x, 32);
+
+void drawStrCenter( String s, int x, int y ) {
+    int16_t x1, y1;
+    uint16_t w, h;
+    gfx->getTextBounds(s,  x,  y,  &x1,  &y1,  &w,  &h);
+    gfx->setCursor(x-w/2, y);
+    gfx->print(s);
+}
+
+void drawPTZ(String v, int x, boolean bold = false) {
+  x = gfx->width() * x / AnalogMax;
+  gfx->drawLine(x, 28, x, 32, WHITE);
   if ( bold ) {
-    u8g2->setFont(PT_FONT_16);
+    gfx->setFont(PT_FONT_16);                  //????????????????????
   } else {
-    u8g2->setFont(PT_FONT_10);
+    gfx->setFont(PT_FONT_10);
   }
   // PSK was 41
-  u8g2->drawStrCenter(x, 43, v.c_str());
+  drawStrCenter(v, x, 43+((bold==true)?8:0));
 }
 
 void displaySetup() {
-  //U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE, /* clock=*/ 16, /* data=*/ 17);
-  // Clock (SCL) and Data (SDA)
-  // HELTEC u8g2 = new U8G2_SSD1306_128X64_NONAME_F_HW_I2C(U8G2_R0, 16, 15, 4);
-  // DOIT u8g2 = new U8G2_SSD1306_128X64_NONAME_F_HW_I2C(U8G2_R0, U8X8_PIN_NONE, 22, 21);
-  // The larger white displays are: U8G2_SH1106_128X64_NONAME_F_HW_I2C
+  #ifdef GFX_EXTRA_PRE_INIT
+  GFX_EXTRA_PRE_INIT();
+  #endif
+
   if ( !InSimulator ) {
-    u8g2 = new U8G2_SH1106_128X64_NONAME_F_HW_I2C(U8G2_R0, PIN_RESET, PIN_CLOCK, PIN_DATA);
+    Arduino_GFX *gfx_chip = new Arduino_ST7735(
+  bus, TFT_RST /* RST */, 1 /* rotation */, false /* IPS */,
+  128 /* width */, 160 /* height */,
+  0 /* col offset 1 */, 0 /* row offset 1 */,
+  0 /* col offset 2 */, 0 /* row offset 2 */,
+  false /* BGR */);
+  gfx = new Arduino_Canvas(160 /* width */, 128 /* height */, gfx_chip);
+
   } else {
-    u8g2 = new U8G2_SSD1306_128X64_NONAME_F_HW_I2C(U8G2_R0, U8X8_PIN_NONE, PIN_CLOCK, PIN_DATA);
+    gfx = new Arduino_ILI9341(bus, TFT_RST, 1, false);
   }
-  u8g2->begin();
+
+  // Init Display
+  if (!gfx->begin()) {
+    Serial.println("gfx->begin() failed!");
+  }
+  gfx->setTextWrap(false);
+  gfx->fillScreen(BLACK);
+
+#ifdef GFX_BL
+  pinMode(GFX_BL, OUTPUT);
+  digitalWrite(GFX_BL, HIGH);
+#endif
+
+  gfx->setCursor(10, 10);
+  gfx->setTextColor(YELLOW);
+  gfx->println("Hello World!");
+
+  delay(1000);
+  gfx->fillScreen(BLACK);
 
   // If Override is pressed on startup (here) go into debug mode on the display
   if( overridePreview() ) {
@@ -175,89 +159,100 @@ void displaySetup() {
 void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int zoomSpeed) {
   // TODO BUG Prevent display burn in
   // If last action > 10 minutes turn display off or just don't do anything after clear
-  u8g2->clearBuffer();
 
-  u8g2->setFont(PT_FONT_10);
+  gfx->fillScreen(BLACK);
+  gfx->setFont(PT_FONT_10);
+
+
+  //Prints log to display
   if ( DebugDisplay ) {
-    u8g2->drawStr(0, 8, getLogItem(5).buf);
-    u8g2->drawStr(0, 19, getLogItem(4).buf);
-    u8g2->drawStr(0, 30, getLogItem(3).buf);
-    u8g2->drawStr(0, 41, getLogItem(2).buf);
-    u8g2->drawStr(0, 52, getLogItem(1).buf);
-    u8g2->drawStr(0, 63, getLogItem(0).buf);
-    u8g2->sendBuffer();
+    gfx->setCursor(0,8);
+    gfx->println(getLogItem(5).buf);
+    gfx->setCursor(0,19);
+    gfx->println(getLogItem(4).buf);
+    gfx->setCursor(0,30);
+    gfx->println(getLogItem(3).buf);
+    gfx->setCursor(0,41);
+    gfx->println(getLogItem(2).buf);
+    gfx->setCursor(0,52);
+    gfx->println(getLogItem(1).buf);
+    gfx->setCursor(0,63);
+    gfx->println(getLogItem(0).buf);
+    gfx->flush();
     return;
   }
 
   String l1, l2;
   if ( wifiUp() ) {
-    u8g2->drawXBM(0, 2, wifi_width, wifi_height, wifi_bits);
+    gfx->drawXBitmap(4, 4, wifi_bits, wifi_width, wifi_height, WHITE);
     l1 = String(getHostname());
     l2 = localIP().toString();
   } else if ( ethUp() ) {
-    u8g2->drawXBM(0, 2, eth_width, eth_height, eth_bits);
+    gfx->drawXBitmap(4, 4, eth_bits, eth_width, eth_height, WHITE);
     l1 = String(getHostname());
     l2 = localIP().toString();
-  } else if ( hotspotUp() ) {  // only if in sta mode
-    u8g2->drawXBM(0, 2, ap_width, ap_height, ap_bits);
-
-    // Alternative, show a QR code for the PTZ setup icon
-    // u8g2->drawXBM(32, 0, ptz_setup_width, ptz_setup_height, ptz_setup_bits);
-    // u8g2->sendBuffer();
-    // return;
+  } else if ( hotspotUp() ) {  // only if in AP mode
+    gfx->drawXBitmap(4, 4, ap_bits, ap_width, ap_height, WHITE);
     l1 = AP_SSID;
     l2 = WiFi.softAPIP().toString();
   }
-  u8g2->drawStrCenter(64, 10, l1.c_str());
-  u8g2->drawStrCenter(64, 21, l2.c_str());
+
+  drawStrCenter(l1, 64, 10 );
+  drawStrCenter(l2, 64, 21 );   
 
   if ( atemSwitcher.isConnected() ) {
-    u8g2->drawXBM(109, 2, atem_width, atem_height, atem_bits);
+    gfx->drawXBitmap(137, 3, atem_bits, atem_width, atem_height, WHITE);
   }
 
   if ( networkUp() ) {
     // Not the prettiest, but need to nudge the camera number over if its double digits
     // and need to not display it at all if its 3 digits
-    u8g2->drawXBM(0, 45, cam_width, cam_height, cam_bits);
-    u8g2->setFont(PT_FONT_10);
+    gfx->drawXBitmap(4, 105, cam_bits, cam_width, cam_height,((overridePreview())?RED:WHITE));
+    
     int cn = getActiveCamera();
     int x = 5;
     if ( getActiveCamera() + 1 > 9 ) x -= 3;
     String cns = "";
     if ( cn < 100 ) cns = String(1 + getActiveCamera());
-    u8g2->drawStr(x, 59, cns.c_str());
-    u8g2->setFont(PT_FONT_16);
-    u8g2->drawStr(30, 62, atemSwitcher.getInputShortName(getActiveCamera() + 1));
+    gfx->setCursor(9,120);
+    gfx->println(cns.c_str());
+    gfx->setCursor(30,107);
+    gfx->println(atemSwitcher.getInputShortName(getActiveCamera() + 1));
   } else {
-    u8g2->setFont(PT_FONT_10);
-    u8g2->drawStr(0, 52, "1- Connect WiFi to " AP_SSID);
-    u8g2->drawStr(0, 63, "2- Open browser to IP above");
+    gfx->setCursor(0, 52);
+    gfx->println("1- Connect WiFi to " AP_SSID);
+    gfx->setCursor(0, 63);
+    gfx->println("2- Open browser to IP above");
   }
 
-  u8g2->drawLine(0, 25, DISPLAY_WIDTH, 25);
+  gfx->drawFastHLine(0, 25, gfx->width(), WHITE);
+
   if ( !settings.hideJoystickPosition ) {
-    drawCenter("P", pan, panSpeed != 0);
-    drawCenter("T", tilt, tiltSpeed != 0);
-    drawCenter("Z", zoom, zoomSpeed != 0);
+    drawPTZ("P", pan, panSpeed != 0);
+    drawPTZ("T", tilt, tiltSpeed != 0); 
+    drawPTZ("Z", zoom, zoomSpeed != 0);
   }
-  // Display it on the screen
-  u8g2->sendBuffer();
+
+  // Flush the frame buffer in the Arduino_Canvas to the TFT
+  gfx->flush();
 }
 
+/*
 void drawBoolean(int x, int y, int sz, boolean value) {
   if ( value ) {
     u8g2->drawBox(x, y, sz, sz);
   } else {
-    u8g2->drawFrame(x, y, sz, sz);
+    u8g2->drawFrame(x, y, sz, sz); //????????????????
   }
 }
+*/
 
 void drawButton1() {
-  u8g2->drawDisc(DISPLAY_WIDTH - 15, 31, 3);
-  u8g2->sendBuffer();
+  gfx->drawCircle(100, 110, 3, RED);
+  gfx->flush();
 }
 
 void drawButton2() {
-  u8g2->drawDisc(DISPLAY_WIDTH - 5, 31, 3);
-  u8g2->sendBuffer();
+  gfx->drawCircle(110, 110, 3, RED);
+  gfx->flush();
 }

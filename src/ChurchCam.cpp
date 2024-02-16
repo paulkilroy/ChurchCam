@@ -32,8 +32,9 @@ bool InSimulator = false;
 
 struct Pinouts_S Pinouts[REV_MODELS]{
   //                   T.  P.  Z. B1. B2. B3 LED RST SLC SDA
-  { "DOIT DevKit V1", 34, 35, 32, 14, 12, 13, 2, 255, 22, 21 },
   { "OMILEX POE",     35, 33, 36,  32,  14, 5,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
+  { "Simulator",      27, 14, 26, 14, 12, 13, 2, 255, 22, 21 },
+  //{ "OMILEX POE",     35, 33, 36,  32,  14, 5,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
   { "WT32-ETH01",     39, 36, 35, 2,  15, 14, 0, 255, 32, 33 },
   { "Heltec WiFi Kit",36, 37, 38, 23, 19, 22, 25, 16, 15, 4 }
 

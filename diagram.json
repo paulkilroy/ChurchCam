@@ -3,8 +3,8 @@
   "author": "Paul Kilroy",
   "editor": "wokwi",
   "parts": [
-    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": -117.65, "left": -182.06, "attrs": {} },
-    { "type": "board-ssd1306", "id": "oled1", "top": 50, "left": 20.23, "attrs": {} },
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": -48, "left": -331.16, "attrs": {} },
+    { "type": "wokwi-ili9341", "id": "lcd1", "top": -258.4, "left": -173.1, "attrs": {} },
     {
       "type": "wokwi-potentiometer",
       "id": "pan",
@@ -30,19 +30,27 @@
   "connections": [
     [ "esp:TX0", "$serialMonitor:RX", "", [] ],
     [ "esp:RX0", "$serialMonitor:TX", "", [] ],
-    [ "oled1:SDA", "esp:D21", "green", [ "v0" ] ],
-    [ "oled1:SCL", "esp:D22", "yellow", [ "v0" ] ],
-    [ "oled1:VCC", "esp:3V3", "red", [ "v0" ] ],
-    [ "oled1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "lcd1:SDA", "esp:D21", "green", [ "v0" ] ],
+    [ "lcd1:SCL", "esp:D22", "yellow", [ "v0" ] ],
+    [ "lcd1:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "lcd1:GND", "esp:GND.1", "black", [ "v0" ] ],
+    [ "lcd1:VCC", "esp:3V3", "red", [ "v0" ] ],
+    [ "lcd1:GND", "esp:GND.3", "black", [ "v0" ] ],
+    [ "lcd1:CS", "esp:25", "gray", [ "v0" ] ],
+    [ "lcd1:RST", "esp:32", "#8f4814", [ "v0" ] ],
+    [ "lcd1:D/C", "esp:33", "blue", [ "v0" ] ],
+    [ "lcd1:MOSI", "esp:16", "orange", [ "v0" ] ],
+    [ "lcd1:SCK", "esp:17", "white", [ "v0" ] ],
+    [ "lcd1:LED", "esp:2", "purple", [ "v0" ] ],
     [ "zoom:GND", "esp:GND.2", "black", [ "v0" ] ],
     [ "tilt:GND", "esp:GND.2", "black", [ "v0" ] ],
     [ "pan:GND", "esp:GND.2", "black", [ "v0" ] ],
     [ "zoom:VCC", "esp:3V3", "red", [ "v0" ] ],
     [ "tilt:VCC", "esp:3V3", "red", [ "v0" ] ],
     [ "pan:VCC", "esp:3V3", "red", [ "v0" ] ],
-    [ "zoom:SIG", "esp:D32", "blue", [ "v0" ] ],
-    [ "tilt:SIG", "esp:D34", "yellow", [ "v0" ] ],
-    [ "pan:SIG", "esp:D35", "green", [ "v0" ] ]
+    [ "zoom:SIG", "esp:26", "blue", [ "v0" ] ],
+    [ "tilt:SIG", "esp:27", "yellow", [ "v0" ] ],
+    [ "pan:SIG", "esp:14", "green", [ "v0" ] ]
   ],
   "dependencies": {}
 }
