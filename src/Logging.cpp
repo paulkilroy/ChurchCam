@@ -3,11 +3,11 @@
 
 #include "globals.h"
 
-#define LOG_SIZE 256
+#define LOG_SIZE 32
 
 static uint8_t count = 0;
 static uint8_t ptr = 0;
-struct LogItem LogItems[256];
+struct LogItem LogItems[LOG_SIZE];
 
 #define LOG_DEBUG 1
 #define LOG_INFO 2

@@ -119,17 +119,17 @@ It's unlikely you will need to change this, though I'd be very interested if you
     EthZPos = MountHeight + PCBThickness;
     
     
-    OScreenWidth = 29.42+2;
-    OScreenLength = 14.7+2;
+    OScreenWidth = 35.04+2;
+    OScreenLength = 28.03+2;
     OScreenCenterX = -Length/2+28;
     OScreenCenterY = 0;
-    OHole1X = OScreenCenterX + 14.7/2 + 6.2 + 5.25 - 2.5;    // Lower Left
-    OHole1Y = OScreenCenterY - 29.42/2 - 2.54 - .45 + 2.5;   // Lower Left
+    OHole1X = OScreenCenterX + 15;    // Lower Left
+    OHole1Y = OScreenCenterY - 29;   // Lower Left
     OHole2X = OHole1X;   // Lower Right
-    OHole2Y = OHole1Y + 30.4;   // Lower Right
-    OHole3X = OHole1X - 28.5;   // Upper Left
+    OHole2Y = OHole1Y + 49.7+.7+.5+.5;   // Lower Right
+    OHole3X = OHole1X - 30;   // Upper Left
     OHole3Y = OHole1Y;   // Upper Left
-    OHole4X = OHole2X - 28.5;   // Upper Left
+    OHole4X = OHole2X - 30;   // Upper Left
     OHole4Y = OHole2Y;   // Upper Left
 
 /* [Display Settings] */
@@ -138,11 +138,11 @@ It's unlikely you will need to change this, though I'd be very interested if you
     // Top Case
     ShowTCase = 1; // [0:No, 1:Yes]
     // Bottom Case
-    ShowBCase = 1; // [0:No, 1:Yes]
+    ShowBCase = 0; // [0:No, 1:Yes]
     // Front panel
-    ShowFPanel = 1; // [0:No, 1:Yes]
+    ShowFPanel = 0; // [0:No, 1:Yes]
     // Back panel  
-    ShowBPanel = 1; // [0:No, 1:Yes]
+    ShowBPanel = 0; // [0:No, 1:Yes]
 
 /* [Hidden] */
     // Case color  
@@ -829,10 +829,10 @@ It's unlikely you will need to change this, though I'd be very interested if you
                       difference() {
                         union() {
                           // PSK Nubs for the OLED holes
-                          translate([OHole1X, OHole1Y, -Height/2+2]) cylinder(8, d=2.8);
-                          translate([OHole2X, OHole2Y, -Height/2+2]) cylinder(8, d=2.8);
-                          translate([OHole3X, OHole3Y, -Height/2+2]) cylinder(8, d=2.8);
-                          translate([OHole4X, OHole4Y, -Height/2+2]) cylinder(8, d=2.8);
+                          translate([OHole1X, OHole1Y, -Height/2+2]) cylinder(8, d=2.4);
+                          translate([OHole2X, OHole2Y, -Height/2+2]) #cylinder(8, d=2.4);
+                          translate([OHole3X, OHole3Y, -Height/2+2]) cylinder(8, d=2.4);
+                          translate([OHole4X, OHole4Y, -Height/2+2]) cylinder(8, d=2.4);
                           CaseWithTabs(CaseDims(), WallThickness, FilletRadius,
                             fPanelType = panelType(FrontPanelType, "IntegratedWithTop", "IntegratedWithBase"), 
                             bPanelType = panelType(BackPanelType, "IntegratedWithTop", "IntegratedWithBase"));     
