@@ -98,9 +98,7 @@ void loop() {
   if (settings.switcherIP[0] != 0 && networkUp() ) {
     atemSwitcher.runLoop();
   }
-
-  // Network loop() is in the wifiCallback(); from ESP code
-
+  
   cameraControlLoop();
 
   webLoop();

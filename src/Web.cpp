@@ -348,8 +348,12 @@ void webSetup() {
 
 void webLoop() {
   // Handle web interface
-  if ( networkUp() )
+  //logi("Checking if network is up");
+  if ( networkUp() ) {
+    //logi("Before handleClient");
     srvr.handleClient();
+    //logi("Network up, handling client");
+  }
 
   if ( Restart ) {
     // gracefully shutdown
