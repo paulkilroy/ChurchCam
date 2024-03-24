@@ -127,12 +127,15 @@ void buttonLoop() {
 }
 
 void cameraControlLoop() {
+  // TODO Move this to Web.cpp
   webSocketServer.listen();
 
+  // TODO Move these to globals panPosition, etc
   int pan = analogRead(PIN_PAN);
   int tilt = analogRead(PIN_TILT);
   int zoom = analogRead(PIN_ZOOM);
 
+  // TODO Move this to Visca.cpp
   int panSpeed = mapOffset(pan, 0, AnalogMax/2, AnalogMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
   int tiltSpeed = -1*mapOffset(tilt, 0, AnalogMax/2, AnalogMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
   int zoomSpeed = mapOffset(zoom, 0, AnalogMax/2, AnalogMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
@@ -145,6 +148,8 @@ void cameraControlLoop() {
     // the visca send function
     ptzDrive(panSpeed, tiltSpeed, zoomSpeed);
     LastSendTime = currentSendTime;
+
+    // TODO Move this to Web.cpp
     char msg[256];
     sprintf(msg, "{ \"pan\": \"%d\", \"viscaPan\": \"%d\", "
       "\"tilt\": \"%d\", \"viscaTilt\": \"%d\", "

@@ -58,8 +58,8 @@ extern WebSocketServer webSocketServer;
 
 struct Pinouts_S {
   char name[20];
-  int tilt;     // Yellow
   int pan;      // Green
+  int tilt;     // Yellow
   int zoom;     // Blue
   int oride;    // Yellow
   int recall1;  // Green
@@ -180,6 +180,7 @@ String discoveredCameraName(int i);
 IPAddress discoveredCameraIP(int i);
 boolean overridePreview();
 
+void networkSetup();
 
 int connect( int cameraNumber );
 int send( int cameraNumber, byte packet[], int size );
