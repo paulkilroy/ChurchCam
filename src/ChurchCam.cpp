@@ -287,7 +287,7 @@ void loop() {
   if (settings.switcherIP[0] != 0 && networkUp() ) {
     atemSwitcher.runLoop();
   }
-
+  
   cameraControlLoop();
 
   webLoop();

@@ -27,6 +27,7 @@ byte visca_pwr_inq_bytes[] = { 0x01, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x02, 0
 
 byte visca_net_inq_bytes[] = { 0x02, 0x45, 0x4E, 0x51, 0x3A, 0x6E, 0x65, 0x74, 0x77, 0x6F, 0x72, 0x6B, 0xFF, 0x03 };
 
+byte visca_set_bytes[] = { 0x01, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x02, 0x81, 0x01, 0x04, 0x3f, 0x01, 0x02, 0xff };
 
 #define RECALL_NUM_BYTE 13
 byte visca_recall_bytes[] = { 0x01, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x02, 0x81, 0x01, 0x04, 0x3f, 0x02, 0x02, 0xff };
@@ -272,26 +273,12 @@ void ptzDrive(int panSpeed, int tiltSpeed, int zoomSpeed) {
   zoom_stopped = zoom_stopping;
 }
 
-void visca_recall(int pos) {
-  // testing button presses
-  /** TESTING
-  int activeCamera = getActiveCamera();
+void visca_set_memory(int pos) {
+  visca_set_bytes[RECALL_NUM_BYTE] = byte(pos);
+  visca_send("RECALL", visca_set_bytes, sizeof(visca_set_bytes), getActiveCamera());
+}
 
-  if( pos == 1) {
-    visca_pt_drive_bytes[PT_DIR1_BYTE] = 0x01; // left
-    visca_pt_drive_bytes[PT_DIR2_BYTE] = 0x03;   
-    visca_send("PT-DRIVE", visca_pt_drive_bytes, sizeof(visca_pt_drive_bytes), activeCamera);
-  } else if( pos == 2) { 
-    visca_pt_drive_bytes[PT_DIR1_BYTE] = 0x02; // right
-    visca_pt_drive_bytes[PT_DIR2_BYTE] = 0x03;
-    visca_send("PT-DRIVE", visca_pt_drive_bytes, sizeof(visca_pt_drive_bytes), activeCamera);
-  } else if( pos == 3 ) {
-    visca_pt_drive_bytes[PT_DIR1_BYTE] = 0x03;
-    visca_pt_drive_bytes[PT_DIR2_BYTE] = 0x03;
-    visca_send("PT-DRIVE", visca_pt_drive_bytes, sizeof(visca_pt_drive_bytes), activeCamera);
-  }
-*/
-
+void visca_recall_memory(int pos) {
   visca_recall_bytes[RECALL_NUM_BYTE] = byte(pos);
   // Serial.printf("in recall, active camera: %d previousCamera: %d\n", getActiveCamera()+1, previousCamera+1);
   visca_send("RECALL", visca_recall_bytes, sizeof(visca_recall_bytes), getActiveCamera());

@@ -14,11 +14,6 @@
 #define VISCA_MAX_WAIT        5 // increased from 20 (2 seconds)
 #define VISCA_MAX_RESPONSE    1024
 
-#define VISCA_PROTOCOL_TCP    1
-#define VISCA_PROTOCOL_UDP    0
-
-
-
 WiFiClient tcpCameraSocket[NUM_CAMERAS];
 WiFiUDP udp;
 boolean udpSetup = false;
@@ -33,9 +28,9 @@ void printBytes(byte array[], unsigned int len) {
 
 String stringBytes(byte array[], unsigned int len) {
   int b = 0;
-  char buffer[250];
+  char buffer[50];
 
-  for (unsigned int i = 0; i < len && b < 245; i++)
+  for (unsigned int i = 0; i < len && b < 46; i++)
   {
     byte nib1 = (array[i] >> 4) & 0x0F;
     byte nib2 = (array[i] >> 0) & 0x0F;
@@ -62,9 +57,9 @@ void writeBytes( uint32_t value, byte packet[], int position ) {
 
 int connect( int cameraNumber ) {
   // TCP is a connected protocol, thats the only one we need to worry about here
-  if ( settings.cameraProtocol[cameraNumber] == VISCA_PROTOCOL_TCP ) {
+  if ( settings.cameraProtocol[cameraNumber] != VISCA_PROTOCOL_UDP ) {
     if ( !tcpCameraSocket[cameraNumber].connected() ) {
-      logw("TCP reconnecting to camera: %d %s port: %d\n", cameraNumber + 1, settings.cameraIP[cameraNumber].toString().c_str(), settings.cameraPort[cameraNumber]);
+      logi("TCP reconnecting to camera: %d %s port: %d\n", cameraNumber + 1, settings.cameraIP[cameraNumber].toString().c_str(), settings.cameraPort[cameraNumber]);
 
       int status = tcpCameraSocket[cameraNumber].connect(settings.cameraIP[cameraNumber], settings.cameraPort[cameraNumber] );
       if ( !status ) {
@@ -88,13 +83,12 @@ int connect( int cameraNumber ) {
   return NETWORK_SUCCESS;
 }
 
-
 int send( int cameraNumber, byte packet[], int size ) {
 #ifdef NETWORK_DEBUG
   //loge("sending packet to camera: %d at ip address: %s\n", cameraNumber + 1, settings.cameraIP[cameraNumber].toString().c_str());
 #endif
   int written = 0;
-  if ( settings.cameraProtocol[cameraNumber] == VISCA_PROTOCOL_TCP ) {
+  if ( settings.cameraProtocol[cameraNumber] != VISCA_PROTOCOL_UDP ) {
     written = tcpCameraSocket[cameraNumber].write(packet, size);
   } else {
     int status = udp.beginPacket(settings.cameraIP[cameraNumber], settings.cameraPort[cameraNumber] );
@@ -118,10 +112,12 @@ int send( int cameraNumber, byte packet[], int size ) {
 
 #ifdef NETWORK_DEBUG
   logd("Send() Cam[%d] [%s:%s:%d] %s Bytes[%d] [%s] == ", cameraNumber + 1, 
-      settings.cameraProtocol[cameraNumber]==VISCA_PROTOCOL_TCP?"TCP":"UDP", 
+      settings.cameraProtocol[cameraNumber]!=VISCA_PROTOCOL_UDP?"TCP":"UDP", 
       settings.cameraIP[cameraNumber].toString().c_str(), 
-      settings.cameraPort[cameraNumber], settings.cameraHeaders[cameraNumber] == 0 ? "EX" : "IN", 
+      settings.cameraPort[cameraNumber],
+      settings.cameraHeaders[cameraNumber] == 0 ? "EX" : "IN", 
       written, stringBytes(packet, size).c_str());
+
 #endif
 
   if ( written != size ) {
@@ -131,9 +127,15 @@ int send( int cameraNumber, byte packet[], int size ) {
   return NETWORK_SUCCESS;
 }
 
+void closeConnection( int cameraNumber ) {
+  if ( settings.cameraProtocol[cameraNumber] != VISCA_PROTOCOL_UDP ) {
+    tcpCameraSocket[cameraNumber].stop();
+  }
+}
+
 int recieve( int cameraNumber, byte packet[] ) {
   int len;
-  if ( settings.cameraProtocol[cameraNumber] == VISCA_PROTOCOL_TCP ) {
+  if ( settings.cameraProtocol[cameraNumber] != VISCA_PROTOCOL_UDP ) {
     boolean msgReady = false;
     for ( int i = 0; i < VISCA_MAX_WAIT; i++) {
       int ret = tcpCameraSocket[cameraNumber].available();

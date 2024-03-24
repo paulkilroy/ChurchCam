@@ -36,12 +36,15 @@ extern WebSocketServer webSocketServer;
 #define NETWORK_ERROR 0
 #define NETWORK_SUCCESS 1
 #define NETWORK_TIMEOUT -1
-#define VISCA_PORT            52381 // or the PTZ / HuddleCam port of 1259 w/o headers
+#define VISCA_PORT 52381 // or the PTZ / HuddleCam port of 1259 w/o headers
 #define CAMERA_UP 1
 #define CAMERA_DOWN 2
 #define CAMERA_OFF 3
 #define CAMERA_NA 4
 
+#define ONVIF_PROTOCOL_TCP    2
+#define VISCA_PROTOCOL_TCP    1
+#define VISCA_PROTOCOL_UDP    0
 
 #define BOARD_NAME Pinouts[HWRev].name       // Board
 #define PIN_TILT Pinouts[HWRev].tilt         // Yellow
@@ -171,7 +174,8 @@ String stringBytes(byte array[], unsigned int len);
 void printBytes(byte array[], unsigned int len);
 void writeBytes( uint32_t value, byte packet[], int position );
 void viscaSetup();
-void visca_recall(int);
+void visca_recall_memory(int);
+void visca_set_memory(int);
 int cameraStatus(int);
 void webSetup();
 void webLoop();
@@ -184,4 +188,12 @@ boolean overridePreview();
 int connect( int cameraNumber );
 int send( int cameraNumber, byte packet[], int size );
 int recieve( int cameraNumber, byte packet[] );
+void closeConnection( int cameraNumber );
+
+void Onvif_SetPreset(int presetNumber);
+void Onvif_GoToPreset(int presetNumber);
+void Onvif_PtzDrive(int, int, int);
+void Onvif_PanTiltDrive(int panSpeed, int tiltSpeed);
+void Onvif_ZoomDrive(int zoomSpeed);
+void Onvif_Stop(bool stopPanTilt, bool stopZoom);
 
