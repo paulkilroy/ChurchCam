@@ -119,8 +119,8 @@ It's unlikely you will need to change this, though I'd be very interested if you
     EthZPos = MountHeight + PCBThickness;
     
     
-    OScreenWidth = 35.04+2;
-    OScreenLength = 28.03+2;
+    OScreenWidth = 46;
+    OScreenLength = 36;
     OScreenCenterX = -Length/2+28;
     OScreenCenterY = 0;
     OHole1X = OScreenCenterX + 15;    // Lower Left

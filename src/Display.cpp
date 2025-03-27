@@ -7,9 +7,12 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <ETH.h>
+#include <math.h>
 
 #include "globals.h"
 bool DebugDisplay = false;
+
+
 
 #define wifi_width 18
 #define wifi_height 17
@@ -63,7 +66,7 @@ const uint8_t cam_bits[] = {
 #define TFT_RST   4 // RES Dark Brown 
 #define TFT_DC    15 // RS Blue
 
-#define TFT_SCLK 16   // SCK White -- Baord says 18
+#define TFT_SCLK 5   // SCK White -- Baord says 18
 #define TFT_MOSI 13  // SDA Light Brown -- Board says 23
 
 #define TFT_BLK 2 // Backlit - Purple
@@ -78,12 +81,15 @@ Arduino_GFX *gfx = create_default_Arduino_GFX();
 
 /* More data bus class: https://github.com/moononournation/Arduino_GFX/wiki/Data-Bus-Class */
 //Arduino_DataBus *bus = create_default_Arduino_DataBus();
-Arduino_DataBus *bus = new Arduino_SWSPI(TFT_DC /* DC */, TFT_CS/* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */);
-
+//Arduino_DataBus *bus = new Arduino_SWSPI(TFT_DC /* DC */, TFT_CS/* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */);
+Arduino_DataBus *bus = new Arduino_HWSPI(TFT_DC /* DC */, TFT_CS/* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */);
 /* More display class: https://github.com/moononournation/Arduino_GFX/wiki/Display-Class */
 // Arduino_GFX *gfx = new Arduino_ILI9341(bus, DF_GFX_RST, 0 /* rotation */, false /* IPS */);
 Arduino_GFX *gfx;
 
+double pi = PI;
+#define arcRadius 80
+double end = 180;
 
 #endif /* !defined(DISPLAY_DEV_KIT) */
 /*******************************************************************************
@@ -114,20 +120,63 @@ void drawPTZ(String v, int x, boolean bold = false) {
   drawStrCenter(v, x, 43+((bold==true)?8:0));
 }
 
+void drawP(int x, boolean bold = false) {
+  
+  x = 160.0+(((double)x/(double)AnalogMax)*120.0)-60.0;
+  
+  
+  if ( bold ) {
+    gfx->setFont(PT_FONT_16);                  //????????????????????
+  } else {
+    gfx->setFont(PT_FONT_10);
+  }
+
+  drawStrCenter("P", x, 140);
+}
+void drawT(int y, boolean bold = false) {
+  
+  y = 140.0+(((double)y/(double)AnalogMax)*120.0)-60.0;
+  
+  
+  if ( bold ) {
+    gfx->setFont(PT_FONT_16);                  //????????????????????
+  } else {
+    gfx->setFont(PT_FONT_10);
+  }
+
+  drawStrCenter("T", 160, y);
+}
+
+double zoomRadians(){
+  return (((analogRead(PIN_ZOOM))/4059.0*180.0)+90.0)*(PI/180);
+}
+
+int findArc_X(int angle){
+    return arcRadius*sin(-(zoomRadians())) + 160;
+    
+}
+
+int findArc_Y(int angle){
+    return arcRadius*cos(zoomRadians()) + 140;
+}
+
 void displaySetup() {
   #ifdef GFX_EXTRA_PRE_INIT
   GFX_EXTRA_PRE_INIT();
   #endif
 
   if ( !InSimulator ) {
-    Arduino_GFX *gfx_chip = new Arduino_ST7735(
-  bus, TFT_RST /* RST */, 1 /* rotation */, false /* IPS */,
-  128 /* width */, 160 /* height */,
-  0 /* col offset 1 */, 0 /* row offset 1 */,
-  0 /* col offset 2 */, 0 /* row offset 2 */,
-  false /* BGR */);
-  gfx = new Arduino_Canvas(160 /* width */, 128 /* height */, gfx_chip);
+    
+    //Arduino_GFX *gfx_chip = new Arduino_ST7735(
+    //bus, TFT_RST /* RST */, 1 /* rotation */, false /* IPS */,
+    //128 /* width */, 160 /* height */,
+   // 0 /* col offset 1 */, 0 /* row offset 1 */,
+   // 0 /* col offset 2 */, 0 /* row offset 2 */,
+   // false /* BGR */); 
+  Arduino_GFX *gfx_chip = new Arduino_ILI9341(bus, TFT_RST /* RST */, 3 /* rotation */, false /* IPS */);
+  gfx = new Arduino_Canvas_Indexed(320 /* width */, 240 /* height */, gfx_chip, 0, 0, 0);
 
+    
   } else {
     gfx = new Arduino_ILI9341(bus, TFT_RST, 1, false);
   }
@@ -160,12 +209,13 @@ void displaySetup() {
 void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int zoomSpeed) {
   // TODO BUG Prevent display burn in
   // If last action > 10 minutes turn display off or just don't do anything after clear
-
+  
   gfx->fillScreen(BLACK);
   gfx->setFont(PT_FONT_10);
 
 
   //Prints log to display
+  /*
   if ( DebugDisplay ) {
     gfx->setCursor(0,8);
     gfx->println(getLogItem(5).buf);
@@ -182,7 +232,7 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
     gfx->flush();
     return;
   }
-
+*/
   String l1, l2;
   if ( wifiUp() ) {
     gfx->drawXBitmap(4, 4, wifi_bits, wifi_width, wifi_height, WHITE);
@@ -208,16 +258,16 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
   if ( networkUp() ) {
     // Not the prettiest, but need to nudge the camera number over if its double digits
     // and need to not display it at all if its 3 digits
-    gfx->drawXBitmap(4, 105, cam_bits, cam_width, cam_height,((overridePreview())?RED:WHITE));
+    gfx->drawXBitmap(4, 210, cam_bits, cam_width, cam_height,((overridePreview())?RED:WHITE));
     
     int cn = getActiveCamera();
     int x = 5;
     if ( getActiveCamera() + 1 > 9 ) x -= 3;
     String cns = "";
     if ( cn < 100 ) cns = String(1 + getActiveCamera());
-    gfx->setCursor(9,120);
+    gfx->setCursor(9,225);
     gfx->println(cns.c_str());
-    gfx->setCursor(30,107);
+    gfx->setCursor(30,225);
     gfx->println(atemSwitcher.getInputShortName(getActiveCamera() + 1));
   } else {
     gfx->setCursor(0, 52);
@@ -226,6 +276,28 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
     gfx->println("2- Open browser to IP above");
   }
 
+
+
+  if (settings.hideJoystickPosition2){
+    gfx->drawEllipse(160, 140, 60, 60, GREEN);
+    gfx->drawLine(100, 140, 220, 140, WHITE);
+    gfx->drawLine(160, 80, 160, 200, WHITE);
+
+    gfx->setCursor(findArc_X(zoomRadians()), findArc_Y(zoomRadians()));
+    if ( zoomSpeed != 0 ) {
+      gfx->setFont(PT_FONT_16);                  //????????????????????
+    } else {
+      gfx->setFont(PT_FONT_10);
+   }
+    gfx->println("Z");
+    drawP(pan, panSpeed !=0);
+    drawT(tilt, tiltSpeed !=0);
+  }
+  
+
+
+
+  gfx->setFont(PT_FONT_10);
   gfx->drawFastHLine(0, 25, gfx->width(), WHITE);
 
   if ( !settings.hideJoystickPosition ) {
@@ -249,11 +321,11 @@ void drawBoolean(int x, int y, int sz, boolean value) {
 */
 
 void drawButton1() {
-  gfx->drawCircle(100, 110, 3, RED);
+  gfx->drawCircle(100, 220, 3, RED);
   gfx->flush();
 }
 
 void drawButton2() {
-  gfx->drawCircle(110, 110, 3, RED);
+  gfx->drawCircle(110, 220, 3, RED);
   gfx->flush();
 }

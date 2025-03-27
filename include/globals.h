@@ -95,6 +95,7 @@ struct Settings {
   uint16_t zoomMid;
   uint16_t zoomMax;
   bool hideJoystickPosition;
+  bool hideJoystickPosition2;
 
 // Cameras + 1 below for hidden broadcast camera
 #define NUM_CAMERAS 20
