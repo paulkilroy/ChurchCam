@@ -1,15 +1,39 @@
-/*#include <ESPAsyncWebServer.h>
-#include <AsyncTCP.h>
-*/
-#include <WebServer.h>
+#include <PsychicHttp.h>
+#include <TemplatePrinter.h>
 
+#include <WiFi.h>
 #include <EEPROM.h>
 #include <Update.h>
 #include <ESPmDNS.h>
 
 #include "globals.h"
 
-WebServer srvr(80);
+// One async PsychicHttp server on port 80 serves both the HTTP config UI and the
+// joystick/PTZ telemetry WebSocket (/ws) -- replacing the old synchronous Arduino
+// WebServer plus the separate mWebSockets server on port 3000.
+static PsychicHttpServer server;
+static PsychicWebSocketHandler ptzWs;
+
+// Web assets embedded into flash via board_build.embed_txtfiles / embed_files
+// (platformio.ini). objcopy names the symbols _binary_html_<name>_start/_end,
+// which we alias to friendly names here. The HTML templates come from
+// embed_txtfiles so they are null-terminated (safe to print as C strings);
+// the css/js are pre-gzipped raw binaries, so we serve them by [start,end).
+extern const char config_html[]  asm("_binary_html_config_html_start");
+extern const char restart_html[] asm("_binary_html_restart_html_start");
+
+extern const uint8_t bootstrap_css_gz[]     asm("_binary_html_bootstrap_min_css_gz_start");
+extern const uint8_t bootstrap_css_gz_end[] asm("_binary_html_bootstrap_min_css_gz_end");
+extern const uint8_t bootstrap_js_gz[]      asm("_binary_html_bootstrap_bundle_min_js_gz_start");
+extern const uint8_t bootstrap_js_gz_end[]  asm("_binary_html_bootstrap_bundle_min_js_gz_end");
+extern const uint8_t headers_css_gz[]       asm("_binary_html_headers_css_gz_start");
+extern const uint8_t headers_css_gz_end[]   asm("_binary_html_headers_css_gz_end");
+extern const uint8_t validate_js_gz[]       asm("_binary_html_validate_forms_js_gz_start");
+extern const uint8_t validate_js_gz_end[]   asm("_binary_html_validate_forms_js_gz_end");
+
+// handleLogData lives in Logging.cpp (it owns the log ring buffer).
+esp_err_t handleLogData(PsychicRequest* request, PsychicResponse* response);
+
 String RestartMsg = "";
 bool Restart = false;
 
@@ -72,7 +96,7 @@ String processor(const String& var) {
       if ( atemSwitcher.isConnected() && atemSwitcher.getInputPortType(i) != 0 )
         continue;
 
-      int s = cameraStatus(cameraNumber);
+      int s = cachedCameraStatus(cameraNumber);   // cache filled by the main loop; no I/O here
       String status = "na";
       if ( s == CAMERA_UP ) status = "up";
       if ( s == CAMERA_DOWN ) status = "down";
@@ -81,7 +105,7 @@ String processor(const String& var) {
       String camName = atemSwitcher.getInputShortName(i);
       if ( camName == "" ) camName = "Camera " + String(i);
       char input[150];
-      // Options for camera status 
+      // Options for camera status
       //    -compute status from responses(?) or just last response
       //  * -explicit status on page generation (way it was working)
       //    -status in background via ajax (regular polling of networks/atem/cameras)
@@ -108,71 +132,70 @@ String processor(const String& var) {
   else if ( var == "PSK" ) return getPSK();
   else if ( var == "BOARD_NAME" ) return Pinouts[HWRev].name;
   else if ( var == "RESTART_MSG" ) return RestartMsg;
+  // Discovered cameras start empty on page load; the list is filled client-side
+  // by the /discoverCameras AJAX call when the user clicks "Discover Cameras".
+  else if ( var == "DiscoveredCameras" ) return String();
 
   logi("Unknown replace: %s\n", var.c_str());
   return String();
 }
 
-void handleProcessor(const char html_file[] ) {
-  logi("web request for: %s\n", srvr.uri().c_str());
-  String html = "";
+// ---------------------------------------------------------------------------
+// Response helpers
+// ---------------------------------------------------------------------------
 
-  int size = strlen_P(html_file);
-  boolean inVar = false;
-  String varName = "";
-  int start = 0, end = 0;
-  for ( ; end < size; end++ ) {
-    char c = pgm_read_word_near(html_file + end);
-    if ( inVar ) {
-      if ( c == '%' ) {
-        inVar = false;
-        if ( varName == "" ) {
-          start = end;
-        } else {
-          // Serial.printf("handleRoot: sending var %s\n", varName.c_str());
-          String content = processor(varName);
-          if ( content.length() > 0 ) html += content;
-          varName = "";
-          start = end + 1;
-        }
-      } else {
-        varName += c;
-      }
-    } else if ( c == '%' ) {
-      // reached a stopping point, send buffer from 'start' up to 'end'
-      inVar = true;
-      // Serial.printf("handleRoot: sending %d to %d\n", start, end);
-      html.concat(&html_file[start], end - start);
-      start = end;
-    } else {
-
-    }
-  }
-  if ( start < end ) {
-    html.concat(&html_file[start], end - start);
-  }
-  srvr.send(200, "text/html", html);
+// Broadcast one telemetry frame to every connected /ws client. Called from the
+// camera-control loop; keeps PsychicHttp types out of CameraControl.cpp.
+void broadcastTelemetry(const char* msg) {
+  ptzWs.sendAll(HTTPD_WS_TYPE_TEXT, (void*)msg, strlen(msg));
 }
 
-void handleRoot() {
-  handleProcessor( config_html );
+// Stream a flash-embedded HTML template through PsychicHttp's TemplatePrinter,
+// substituting %VAR% via processor(). Streamed in chunks -- no giant heap String
+// (this is what removes the multi-second config-page stall). Every literal % in
+// config.html is followed by a non-parameter char, so TemplatePrinter re-emits
+// them verbatim -- no escaping step needed now that the file is embedded raw.
+static esp_err_t sendTemplate(PsychicResponse* response, const char* embeddedHtml) {
+  PsychicStreamResponse stream(response, "text/html");
+  stream.beginSend();
+  TemplatePrinter::start(stream,
+    [](Print& out, const char* param) -> bool {
+      out.print(processor(String(param)));   // unknown -> "" (consumed), matches old behavior
+      return true;
+    },
+    [embeddedHtml](TemplatePrinter& printer) {
+      printer.print(embeddedHtml);   // embedded flash is memory-mapped; read directly
+    });
+  return stream.endSend();
 }
 
-void handleRestartAndWait() {
-  srvr.sendHeader("Connection", "close");
+// Serve a gzipped, long-cached static asset embedded in flash.
+static esp_err_t sendGzipAsset(PsychicResponse* response, const char* type,
+                               const uint8_t* data, size_t len) {
+  response->addHeader("Cache-Control", "public, max-age=2678400");
+  response->addHeader("Content-Encoding", "gzip");
+  return response->send(200, type, data, len);
+}
 
+// ---------------------------------------------------------------------------
+// HTTP handlers
+// ---------------------------------------------------------------------------
+
+static esp_err_t handleRoot(PsychicRequest* request, PsychicResponse* response) {
+  logi("web request for: %s\n", request->uri().c_str());
+  return sendTemplate(response, config_html);
+}
+
+static esp_err_t handleRestartAndWait(PsychicRequest* request, PsychicResponse* response) {
   if ( RestartMsg == "" ) RestartMsg = "Restart Successful.";
-
   Serial.println("RESTART - Sending HTML");
-  handleProcessor( restart_html );
-  Serial.println("RESTART - restart()");
-
-  Restart = true;
+  esp_err_t r = sendTemplate(response, restart_html);
+  Restart = true;   // the main loop performs the actual reboot
+  return r;
 }
 
-void handleDiscoverCameras() {
-  logi("web request for: %s\n", srvr.uri().c_str());
-  //       { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "0", "headers": "1" },
+static esp_err_t handleDiscoverCameras(PsychicRequest* request, PsychicResponse* response) {
+  logi("web request for: %s\n", request->uri().c_str());
   const char fmt[] = "{ \"id\": \"%d\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%u\", \"type\": \"%d\", \"transport\": \"%d\", \"headers\": \"%d\" }";
 
   // Run both discovery mechanisms; each appends into discoveredCameras[],
@@ -193,52 +216,30 @@ void handleDiscoverCameras() {
   }
   inputs += "]";
   logi("Discovered %d camera(s): %s", numDiscoveredCameras, inputs.c_str());
-  srvr.send(200, "application/json", inputs);
+  return response->send(200, "application/json", inputs.c_str());
 }
 
-int getCamNum(String s, String x) {
-  String n = s;
-  n.replace(x, "");
-  return n.toInt();
-}
-// Save new settings from client in EEPROM and restart the ESP8266 module
-void handleSave() {
-  logi("SAVE request for: %s\n", srvr.uri().c_str());
+// Save new settings from client into EEPROM and restart. Fields are read by name
+// (getParam returns null when a field wasn't submitted, so only present values
+// change), and the per-camera fields are queried by index.
+static esp_err_t handleSave(PsychicRequest* request, PsychicResponse* response) {
+  logi("SAVE request for: %s\n", request->uri().c_str());
 
-  for ( uint8_t i = 0; i < srvr.args(); i++ ) {
-    String var = srvr.argName(i);
-    String val = srvr.arg(i);
-    // Serial.printf("name: %s - %s\n", var.c_str(), val.c_str());
+  PsychicWebParameter* p;
+  if ( (p = request->getParam("networkName")) )     strlcpy(settings.ssid, p->value().c_str(), sizeof(settings.ssid));
+  if ( (p = request->getParam("networkPassword")) ) strlcpy(settings.psk,  p->value().c_str(), sizeof(settings.psk));
+  if ( (p = request->getParam("staticIP")) )        settings.staticIP = ( p->value() == "true" );
+  if ( (p = request->getParam("staticIPAddr")) )    settings.staticIPAddr.fromString(p->value());
+  if ( (p = request->getParam("staticSubnetMask")) ) settings.staticSubnetMask.fromString(p->value());
+  if ( (p = request->getParam("staticGateway")) )   settings.staticGateway.fromString(p->value());
+  if ( (p = request->getParam("atemConfigIP")) )    settings.switcherIP.fromString(p->value());
 
-    if ( var == "networkName" ) {
-      strlcpy(settings.ssid, val.c_str(), sizeof(settings.ssid));
-    } else if ( var == "networkPassword" ) {
-      strlcpy(settings.psk, val.c_str(), sizeof(settings.psk));
-    } else if ( var == "staticIP" ) {
-      settings.staticIP = ( val == "true" );
-    } else if ( var == "staticIPAddr" ) {
-      settings.staticIPAddr.fromString(val);
-    } else if ( var == "staticSubnetMask" ) {
-      settings.staticSubnetMask.fromString(val);
-    } else if ( var == "staticGateway" ) {
-      settings.staticGateway.fromString(val);
-    } else if ( var == "atemConfigIP" ) {
-      settings.switcherIP.fromString(val);
-    } else if ( var.startsWith("camConfigIP") ) {
-      int camNum = getCamNum(var, "camConfigIP");
-      settings.cameraIP[camNum].fromString(val);
-    } else if ( var.startsWith("camConfigType") ) {
-      int camNum = getCamNum(var, "camConfigType");
-      settings.cameraType[camNum] = val.toInt();       // CAM_VISCA | CAM_ONVIF
-    } else if ( var.startsWith("camConfigTransport") ) {
-      int camNum = getCamNum(var, "camConfigTransport");
-      settings.cameraTransport[camNum] = val.toInt();  // CAM_UDP | CAM_TCP
-    } else if ( var.startsWith("camConfigPort") ) {
-      int camNum = getCamNum(var, "camConfigPort");
-      settings.cameraPort[camNum] = val.toInt();
-    } else {
-      logi("handleSave(): Unknown var: %s - %s", var.c_str(), val.c_str());
-    }
+  for ( int i = 0; i < NUM_CAMERAS; i++ ) {
+    String n = String(i);
+    if ( (p = request->getParam(("camConfigIP" + n).c_str())) )        settings.cameraIP[i].fromString(p->value());
+    if ( (p = request->getParam(("camConfigType" + n).c_str())) )      settings.cameraType[i]      = p->value().toInt(); // CAM_VISCA | CAM_ONVIF
+    if ( (p = request->getParam(("camConfigTransport" + n).c_str())) ) settings.cameraTransport[i] = p->value().toInt(); // CAM_UDP   | CAM_TCP
+    if ( (p = request->getParam(("camConfigPort" + n).c_str())) )      settings.cameraPort[i]      = p->value().toInt();
   }
 
   // VISCA-IP header framing: VISCA over UDP is framed, VISCA over TCP is raw.
@@ -256,110 +257,85 @@ void handleSave() {
   }
 
   RestartMsg = "Successfully updated settings.";
-  handleRestartAndWait();
+  return handleRestartAndWait(request, response);
 }
 
-// Send 404 to client in case of invalid webpage being requested.
-void handleNotFound() {
-  logi("web request for: %s\n", srvr.uri().c_str());
-
-  srvr.send(404, "text/html", "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width, initial-scale=1.0\"><title>PTZ Setup</title></head><body style=\"font-family:Verdana;\"><table bgcolor=\"#777777\"border=\"0\"width=\"100%\"cellpadding=\"1\"style=\"color:#ffffff;font-size:.8em;\"><tr><td><h1>&nbsp PTZ Setup</h1></td></tr></table><br>404 - Page not found</body></html>");
+static esp_err_t handleErase(PsychicRequest* request, PsychicResponse* response) {
+  for ( size_t i = 0; i < sizeof(settings); i++ ) EEPROM.write(i, 255);
+  EEPROM.commit();
+  RestartMsg = "All Data Erased.";
+  return handleRestartAndWait(request, response);
 }
 
-const char text_html[] PROGMEM = "text/html";
-const char text_css[] PROGMEM = "text/css";
-const char text_javascript[] PROGMEM = "text/javascript";
+static esp_err_t handleNotFound(PsychicRequest* request, PsychicResponse* response) {
+  logi("web request for: %s\n", request->uri().c_str());
+  return response->send(404, "text/html", "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width, initial-scale=1.0\"><title>PTZ Setup</title></head><body style=\"font-family:Verdana;\"><table bgcolor=\"#777777\"border=\"0\"width=\"100%\"cellpadding=\"1\"style=\"color:#ffffff;font-size:.8em;\"><tr><td><h1>&nbsp PTZ Setup</h1></td></tr></table><br>404 - Page not found</body></html>");
+}
+
+// OTA firmware upload: chunked write to Update, then the client polls /restart.
+static esp_err_t otaUploadChunk(PsychicRequest* request, const String& filename,
+                                uint64_t index, uint8_t* data, size_t len, bool last) {
+  if ( index == 0 ) {
+    Serial.printf("UPDATE: %s\n", filename.c_str());
+    if ( !Update.begin(UPDATE_SIZE_UNKNOWN) ) Update.printError(Serial);
+  }
+  if ( len && Update.write(data, len) != len ) Update.printError(Serial);
+  if ( last ) {
+    if ( Update.end(true) ) Serial.printf("Update Success: %llu\n", index + len);
+    else Update.printError(Serial);
+  }
+  return ESP_OK;
+}
+
+// ---------------------------------------------------------------------------
+// Setup / loop
+// ---------------------------------------------------------------------------
 
 void webSetup() {
-  // Initialize and begin HTTP server for handeling the web interface
-  srvr.on("/", handleRoot);
+  server.config.max_uri_handlers = 24;   // headroom over the ~14 routes below
 
-  // Send these out as binary gziped files and let the browser cache these
-  srvr.on("/bootstrap.min.css", HTTP_GET, []() {
-    logi("web request for: %s", srvr.uri().c_str());
-    srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_css, bootstrap_min_css, bootstrap_min_css_bytes); });
-  srvr.on("/headers.css", []() {
-    logi("web request for: %s", srvr.uri().c_str());
-    srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_css, headers_css, headers_css_bytes); });
-  srvr.on("/bootstrap.bundle.min.js", HTTP_GET, []() {
-    logi("web request for: %s", srvr.uri().c_str());
-    srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_javascript, bootstrap_bundle_min_js, bootstrap_bundle_min_js_bytes); });
-  srvr.on("/validate-forms.js", HTTP_GET, []() {
-    logi("web request for: %s", srvr.uri().c_str());
-    srvr.sendHeader("Cache-Control", "public, max-age=2678400");
-    srvr.sendHeader("Content-Encoding", "gzip");
-    srvr.send_P(200, text_javascript, validate_forms_js, validate_forms_js_bytes); });
+  server.on("/", HTTP_GET, handleRoot);
 
-  srvr.on("/ping", HTTP_GET, []() {
-    logi("web request for: %s", srvr.uri().c_str());
-    srvr.send(200, "text/plain", "pong"); });
-  srvr.on("/discoverCameras", handleDiscoverCameras);
-  srvr.on("/save", handleSave);
-  srvr.on("/restart", handleRestartAndWait);
-  srvr.on("/logData", handleLogData);
+  server.on("/bootstrap.min.css", HTTP_GET, [](PsychicRequest* req, PsychicResponse* res) {
+    return sendGzipAsset(res, "text/css", bootstrap_css_gz, bootstrap_css_gz_end - bootstrap_css_gz); });
+  server.on("/headers.css", HTTP_GET, [](PsychicRequest* req, PsychicResponse* res) {
+    return sendGzipAsset(res, "text/css", headers_css_gz, headers_css_gz_end - headers_css_gz); });
+  server.on("/bootstrap.bundle.min.js", HTTP_GET, [](PsychicRequest* req, PsychicResponse* res) {
+    return sendGzipAsset(res, "text/javascript", bootstrap_js_gz, bootstrap_js_gz_end - bootstrap_js_gz); });
+  server.on("/validate-forms.js", HTTP_GET, [](PsychicRequest* req, PsychicResponse* res) {
+    return sendGzipAsset(res, "text/javascript", validate_js_gz, validate_js_gz_end - validate_js_gz); });
 
-  srvr.on("/erase", HTTP_GET, []() {
-    for ( int i = 0; i < sizeof(settings); i++ ) {
-      EEPROM.write(i, 255);
-    }
-    EEPROM.commit();
-    RestartMsg = "All Data Erased.";
-    handleRestartAndWait(); });
+  server.on("/ping", HTTP_GET, [](PsychicRequest* req, PsychicResponse* res) {
+    return res->send(200, "text/plain", "pong"); });
 
-  // handling uploading firmware file
-  srvr.on("/update", HTTP_POST, []() {
-    RestartMsg = "Firmware Update: ";
-    RestartMsg += Update.hasError() ? "FAIL" : "OK";
-    RestartMsg += ".";
-    srvr.send(200, "text/plain", "pong");
-    // When this returns, the javascript calls /restart which performs the reboot
-    // handleRestartAndWait();
-    },
-    []() {
-      HTTPUpload& upload = srvr.upload();
-      if ( upload.status == UPLOAD_FILE_START ) {
-        Serial.printf("UPDATE: %s\n", upload.filename.c_str());
-        if ( !Update.begin(UPDATE_SIZE_UNKNOWN) ) { //start with max available size
-          Update.printError(Serial);
-        }
-      } else if ( upload.status == UPLOAD_FILE_WRITE ) {
-        // Serial.print(".");
-        /* flashing firmware to ESP*/
-        if ( Update.write(upload.buf, upload.currentSize) != upload.currentSize ) {
-          Update.printError(Serial);
-        }
-      } else if ( upload.status == UPLOAD_FILE_END ) {
-        if ( Update.end(true) ) { //true to set the size to the current progress
-          Serial.printf("Update Success: %u\n", upload.totalSize);
-        } else {
-          Update.printError(Serial);
-        }
-      }
-    });
+  server.on("/discoverCameras", HTTP_GET, handleDiscoverCameras);
+  server.on("/save", HTTP_POST, handleSave);
+  server.on("/restart", HTTP_ANY, handleRestartAndWait);
+  server.on("/logData", HTTP_GET, handleLogData);
+  server.on("/erase", HTTP_GET, handleErase);
 
-  srvr.onNotFound(handleNotFound);
+  // OTA firmware upload
+  PsychicUploadHandler* updateHandler = new PsychicUploadHandler();
+  updateHandler->onUpload(otaUploadChunk);
+  updateHandler->onRequest([](PsychicRequest* req, PsychicResponse* res) {
+    RestartMsg = String("Firmware Update: ") + ( Update.hasError() ? "FAIL" : "OK" ) + ".";
+    // The client's JS calls /restart next, which performs the reboot.
+    return res->send(200, "text/plain", "pong");
+  });
+  server.on("/update", HTTP_POST, updateHandler);
 
-  srvr.begin();
+  // Joystick / PTZ telemetry WebSocket, on the same port 80 (was mWebSockets:3000).
+  ptzWs.onOpen([](PsychicWebSocketClient* client) {
+    logi("ws telemetry client connected: %s", client->remoteIP().toString().c_str()); });
+  ptzWs.onFrame([](PsychicWebSocketRequest* req, httpd_ws_frame_t* frame) -> esp_err_t {
+    return ESP_OK;   // browser only receives telemetry; inbound frames ignored
+  });
+  server.on("/ws", &ptzWs);
+
+  server.onNotFound(handleNotFound);
+  server.begin();
 }
 
 void webLoop() {
-  // Handle web interface
-  //logi("Checking if network is up");
-  if ( networkUp() ) {
-    //logi("Before handleClient");
-    srvr.handleClient();
-    //logi("Network up, handling client");
-  }
-
-  if ( Restart ) {
-    // gracefully shutdown
-    Serial.println("LOOP - shutting down");
-    ESP.restart();
-  }
+  // PsychicHttp serves requests in its own FreeRTOS task; nothing to poll here.
 }

@@ -106,10 +106,8 @@ void networkSetup(const char info[]) {
     logi("%s Connecting to ATEM Switcher IP: %s", info, settings.switcherIP.toString().c_str());
   }
 
-  // Start WebServer and WebSocket
+  // Start the PsychicHttp server (HTTP config UI + telemetry WebSocket on :80).
   webSetup();
-  // TODO Move to Web.cpp
-  webSocketServer.begin();
 }
 
 // Called every loop() iteration. Starts network services exactly once, in loop

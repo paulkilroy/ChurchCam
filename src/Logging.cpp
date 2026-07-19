@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <stdarg.h>
+#include <PsychicHttp.h>
 
 #include "globals.h"
 
@@ -48,7 +49,7 @@ struct LogItem getLogItem(uint8_t i) {
   return LogItems[(uint8_t)(ptr-i)];
 }
 
-void handleLogData() {
+esp_err_t handleLogData(PsychicRequest* request, PsychicResponse* response) {
   uint8_t p = ptr;
   String html = "";
   for ( int i = 0; i < count; i++, p-- ) {
@@ -69,7 +70,7 @@ void handleLogData() {
     html += LogItems[p].buf;
     html += "</div>";
   }
-  srvr.send(200, "text/html", html);
+  return response->send(200, "text/html", html.c_str());
 }
 
 void display_i(const char* fmt, ...) {

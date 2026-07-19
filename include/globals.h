@@ -1,12 +1,10 @@
 #pragma once
 #include <Arduino.h>
 #include <ATEMmin.h>
-//#include <ESPAsyncWebServer.h>
-#include <WebServer.h>
-#include <WebSocketServer.h>
 
-using namespace net;
-extern WebSocketServer webSocketServer;
+// Web UI + telemetry WebSocket are served by PsychicHttp (one async server on
+// port 80). The concrete PsychicHttp types stay inside Web.cpp; other modules
+// push telemetry through broadcastTelemetry() below.
 
 
 #define logi(format, ...) display_i(format, ##__VA_ARGS__); log_i(format, ##__VA_ARGS__);
@@ -145,27 +143,15 @@ extern int AnalogMax;
 extern ATEMmin atemSwitcher;
 extern char ssid[];
 extern bool InSimulator;
-extern WebServer srvr;
 extern struct Pinouts_S Pinouts[];
 extern struct Settings settings;
 extern struct LogItem LogItems[];
 
-extern const char config_html PROGMEM[];
-extern const char restart_html PROGMEM[];
-extern const char bootstrap_bundle_min_js PROGMEM[];
-extern const char bootstrap_min_css PROGMEM[];
-extern const char headers_css PROGMEM[];
-extern const char validate_forms_js PROGMEM[];
-extern const size_t bootstrap_bundle_min_js_bytes;
-extern const size_t bootstrap_min_css_bytes;
-extern const size_t headers_css_bytes;
-extern const size_t validate_forms_js_bytes;
+// Web assets (config_html, restart_html, gzipped css/js) are embedded in flash
+// via board_build.embed_* and declared as asm-aliased symbols in Web.cpp.
 
 // Extern functions
-/*
-static void handleLog(AsyncWebServerRequest *request);
-*/
-void handleLogData();
+void broadcastTelemetry(const char* msg);   // push a telemetry frame to /ws clients (Web.cpp)
 struct LogItem getLogItem(uint8_t i);
 void cameraControlLoop();
 void cameraControlSetup();
@@ -201,7 +187,9 @@ void writeBytes( uint32_t value, byte packet[], int position );
 void viscaSetup();
 void visca_recall_memory(int);
 void visca_set_memory(int);
-int cameraStatus(int);   // protocol-agnostic dispatcher (CameraControl.cpp)
+int cameraStatus(int);        // blocking probe -- MAIN-LOOP TASK ONLY (does socket I/O)
+void pollCameraStatus();      // main loop: refresh one camera's cached status per tick
+int cachedCameraStatus(int);  // web handler: read cached status (no I/O, race-free)
 int viscaStatus(int);    // VISCA power inquiry (Visca.cpp)
 int onvifStatus(int);    // ONVIF TCP reachability (Onvif.cpp)
 void webSetup();

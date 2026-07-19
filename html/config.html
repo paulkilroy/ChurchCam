@@ -51,28 +51,14 @@
   <script>
     LogCallback = null;
     ptzSocket = null;
-    Networks = [
-      { "name": "Ethernet", "status": "off", "ip": "10.0.4.40", "ssid": "-", "info": "tbd" },
-      { "name": "WiFi", "status": "up", "ip": "10.0.4.40", "ssid": "KilroyNetwork", "info": "tbd" },
-      { "name": "Hotspot", "status": "down", "ip": "10.0.4.40", "ssid": "ptz-config", "info": "tbd" },
-    ];
-    ATEMSwitcher = [
-      { "status": "down", "name": "ATEM Mini Pro", "ip": "10.0.4.40", "port": "-", "protocol": "1" },
-    ];
-    ATEMCameras = [
-      { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "1", "headers": "0" },
-      { "id": "1", "status": "up", "name": "Camera 2", "ip": "10.0.4.62", "port": "60578", "type": "0", "transport": "0", "headers": "1" },
-      { "id": "2", "status": "off", "name": "H2R", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
-      { "id": "3", "status": "off", "name": "AV PC", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
-      { "id": "4", "status": "off", "name": "Cam5", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
-      { "id": "5", "status": "off", "name": "Cam6", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
-      { "id": "6", "status": "up", "name": "Tracker", "ip": "10.0.4.171", "port": "5678", "type": "1", "transport": "1", "headers": "0" },
-      { "id": "7", "status": "off", "name": "Cam8", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" }
-    ];
-    DiscoveredCameras = [
-      { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "0", "headers": "1" },
-      { "name": "HD Camera30x", "ip": "10.0.4.62", "port": "60578", "type": "0", "transport": "0", "headers": "1" }
-    ];
+    // Data below is injected by the firmware's PsychicHttp template processor
+    // (Web.cpp processor()); the percent-delimited tokens are replaced with live
+    // JSON at serve time. NOTE: this file no longer renders standalone (file://)
+    // with demo data -- it is served templated by the device.
+    Networks = [ %Networks% ];
+    ATEMSwitcher = [ %ATEMSwitcher% ];
+    ATEMCameras = [ %ATEMCameras% ];
+    DiscoveredCameras = [ %DiscoveredCameras% ];
 
     function updateNetworks() {
       let template = document.getElementById("networkStatus");
@@ -315,8 +301,8 @@
     }
     function setupPTZSocket() {
       if (location.protocol != "file:") {
-        console.log("connecting to ws://" + location.hostname + ":3000");
-        ptzSocket = new WebSocket("ws://" + location.hostname + ":3000");
+        console.log("connecting to ws://" + location.host + "/ws");
+        ptzSocket = new WebSocket("ws://" + location.host + "/ws");
 
         ptzSocket.onopen = function (e) {
           console.log("[open] Connection established");

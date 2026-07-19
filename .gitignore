@@ -4,8 +4,6 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/extensions.json
-src/WebFiles.cpp
-html/*.gz
 scad/*.stl
 scad/*.3mf
 .DS_Store

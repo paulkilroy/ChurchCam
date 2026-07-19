@@ -1,12 +1,7 @@
-#include <Arduino.h> 
+#include <Arduino.h>
 #include <EEPROM.h>
 #include "globals.h"
 #include <time.h>
-/*
-#include <WebSocketServer.h>
-using namespace net;
-*/
-WebSocketServer webSocketServer { 3000 };
 
 #define THRESHOLD .1
 
@@ -114,6 +109,30 @@ int cameraStatus(int cameraNumber) {
                                : onvifStatus(cameraNumber);
 }
 
+// --- Cached status --------------------------------------------------------
+// cameraStatus() does blocking socket I/O, so it must run ONLY in the main-loop
+// task -- the same task that drives the active camera. The async PsychicHttp
+// handler must never call it directly, or two tasks race on the same camera
+// socket (which flapped the active camera up/down). Instead the main loop polls
+// one camera per tick into this cache and the web UI reads the cache.
+static int      camStatusCache[NUM_CAMERAS] = { CAMERA_NA };
+static int      camPollIdx = 0;
+static uint32_t lastStatusPollAt = 0;
+#define STATUS_POLL_INTERVAL_MS 300
+
+void pollCameraStatus() {
+  uint32_t now = millis();
+  if (now - lastStatusPollAt < STATUS_POLL_INTERVAL_MS) return;
+  lastStatusPollAt = now;
+  camStatusCache[camPollIdx] = cameraStatus(camPollIdx);
+  camPollIdx = (camPollIdx + 1) % NUM_CAMERAS;
+}
+
+int cachedCameraStatus(int cameraNumber) {
+  if (cameraNumber < 0 || cameraNumber >= NUM_CAMERAS) return CAMERA_NA;
+  return camStatusCache[cameraNumber];
+}
+
 // move to visca code 
 // Divide into two functions -- isDeadZone() and viscaMapOffset()
 int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, long rightMax) {
@@ -188,8 +207,9 @@ void buttonLoop() {
 }
 
 void cameraControlLoop() {
-  // TODO Move this to Web.cpp
-  webSocketServer.listen();
+  // Refresh the camera-status cache from this (main-loop) task, so the async web
+  // handler never touches a camera socket concurrently with camera driving.
+  pollCameraStatus();
 
   // TODO Move these to globals panPosition, etc
   int pan = analogRead(PIN_PAN);
@@ -227,13 +247,12 @@ void cameraControlLoop() {
     }
     LastSendTime = currentSendTime;
 
-    // TODO Move this to Web.cpp
     char msg[256];
     sprintf(msg, "{ \"pan\": \"%d\", \"viscaPan\": \"%d\", "
       "\"tilt\": \"%d\", \"viscaTilt\": \"%d\", "
       "\"zoom\": \"%d\", \"viscaZoom\": \"%d\" }"
       ,pan, panSpeed, tilt, tiltSpeed, zoom, zoomSpeed);
-    webSocketServer.broadcast(WebSocket::DataType::TEXT, msg, strlen(msg));
+    broadcastTelemetry(msg);
   }
     buttonLoop();
     displayLoop(pan, tilt, zoom, panSpeed, tiltSpeed, zoomSpeed);
