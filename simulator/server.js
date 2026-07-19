@@ -16,7 +16,7 @@
  *   Camera 2         : VISCA  TCP  port 52382   (ATEM input 2 -> view 2)
  *   Camera 3         : ONVIF  TCP  port 8083    (ATEM input 3 -> view 3)
  *   Camera 4         : ONVIF  TCP  port 8084    (ATEM input 4 -> view 4)
- * Then open http://localhost:8080
+ * Then open http://localhost:8099
  */
 
 const http = require('http');
@@ -183,8 +183,12 @@ function parseVisca(buf, view, reply) {
   }
 }
 
-// VISCA power-on reply: ACK (y0 41 FF) then COMPLETE (y0 50 02 FF), framed for
-// UDP, raw for TCP -- matching the controller's waitForAck+waitForComplete.
+// VISCA power INQUIRY reply. A real camera answers an inquiry with the completion
+// message *directly* -- no ACK (ACKs are only for control commands that take time
+// to execute). Sending a separate ACK here is both unfaithful and breaks the
+// controller over TCP: the ACK and COMPLETE coalesce into one segment, and the
+// controller's fixed-offset power-byte read then lands on the ACK's terminator.
+// Framed for UDP, raw for TCP -- matching the controller's read.
 function replyViscaPowerOn(view, seq, reply) {
   const frame = (payload) => {
     if (!view.framed) return Buffer.from(payload);
@@ -195,8 +199,7 @@ function replyViscaPowerOn(view, seq, reply) {
     Buffer.from(payload).copy(b, 8);
     return b;
   };
-  reply(frame([0x90, 0x41, 0xff]));           // ACK
-  reply(frame([0x90, 0x50, 0x02, 0xff]));     // COMPLETE, power = 0x02 (on)
+  reply(frame([0x90, 0x50, 0x02, 0xff]));     // COMPLETE (inquiry reply), power = 0x02 (on)
 }
 
 // VISCA over UDP

@@ -102,6 +102,18 @@ static bool isVisca(int cam) {
   return settings.cameraType[cam] == CAM_VISCA;
 }
 
+// Protocol-agnostic camera health. The shared reachability checks live here; the
+// actual probe is dispatched to the camera's own protocol layer (VISCA power
+// inquiry vs. ONVIF TCP reachability) so neither module needs to know the other.
+int cameraStatus(int cameraNumber) {
+  if (!networkUp() || settings.cameraIP[cameraNumber][0] == 0 ||
+      settings.cameraIP[cameraNumber][0] == 255) {
+    return CAMERA_NA;
+  }
+  return isVisca(cameraNumber) ? viscaStatus(cameraNumber)
+                               : onvifStatus(cameraNumber);
+}
+
 // move to visca code 
 // Divide into two functions -- isDeadZone() and viscaMapOffset()
 int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, long rightMax) {

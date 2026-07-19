@@ -26,7 +26,9 @@ gateway = "ws://localhost:9011"
 from = "localhost:8180"
 to = "target:80"
 
-# ws://localhost:3000  ->  device joystick-telemetry websocket on port 3000
+# ws://localhost:3300  ->  device joystick-telemetry websocket on port 3000.
+# Host side is 3300 (not 3000) to avoid colliding with a local Next.js/other
+# dev server on 3000, which would abort Wokwi's forward setup (incl. 8180).
 [[net.forward]]
-from = "localhost:3000"
+from = "localhost:3300"
 to = "target:3000"

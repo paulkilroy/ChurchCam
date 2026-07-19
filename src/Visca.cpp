@@ -323,13 +323,10 @@ void viscaSetup() {
   }
 }
 
-int cameraStatus(int cameraNumber) {
+// VISCA health probe: ask the camera for its power state. The common NA checks
+// (network down / no IP) are handled one level up in cameraStatus().
+int viscaStatus(int cameraNumber) {
   byte response[256];
-
-  if (!networkUp() || settings.cameraIP[cameraNumber][0] == 0 || 
-    settings.cameraIP[cameraNumber][0] == 255) {
-    return CAMERA_NA;
-  }
 
   int pwrByte = VISCA_HEADER_SIZE + VISCA_PWR_INQ_BYTE;
   if (!settings.cameraHeaders[cameraNumber]) {

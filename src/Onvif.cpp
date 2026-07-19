@@ -222,6 +222,16 @@ void onvif_send( int cameraNumber ) {
     camClose(cameraNumber);
 }
 
+// ONVIF health probe: ONVIF is an HTTP/SOAP service, so a VISCA-style inquiry is
+// meaningless -- TCP reachability of the service is the signal. onvif_send()
+// opens a fresh socket per call, so connect, treat success as up, then close.
+// (Could be upgraded to an unauthenticated GetSystemDateAndTime probe later.)
+int onvifStatus(int cameraNumber) {
+    int ok = camConnect(cameraNumber);
+    camClose(cameraNumber);
+    return (ok == NETWORK_SUCCESS) ? CAMERA_UP : CAMERA_DOWN;
+}
+
 void initialize() {
     Onvif_SetPreset(1);
     Onvif_SetPreset(2);

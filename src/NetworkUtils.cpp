@@ -124,7 +124,14 @@ static bool tcpConnectBounded( int fd, struct sockaddr_in *addr ) {
 int camConnect( int cameraNumber ) {
   CameraLink &c = cameras[cameraNumber];
 
-  if ( c.fd >= 0 ) return NETWORK_SUCCESS;      // already open (UDP persists; live TCP)
+  if ( c.fd >= 0 ) {
+    // Already open -- but reopen if the target moved since we opened. The default
+    // active camera can open its socket very early, before settings are configured,
+    // pinning a stale ip/port; this also lets a settings change take effect.
+    if ( c.ip == settings.cameraIP[cameraNumber] && c.port == settings.cameraPort[cameraNumber] )
+      return NETWORK_SUCCESS;                   // UDP persists; live TCP
+    linkClose( cameraNumber );
+  }
   if ( millis() < c.retryAt ) return NETWORK_ERROR;  // still backing off a dead camera
 
   c.transport = settings.cameraTransport[cameraNumber];
@@ -204,7 +211,11 @@ int camSend( int cameraNumber, byte packet[], int size ) {
 
   if ( written != size ) {
     loge( "Didn't write enough bytes: %d vs %d\n", size, written );
-    if ( c.transport == CAM_TCP ) linkFail( cameraNumber );  // TCP socket is likely dead; force reopen
+    // Tear down and reopen on ANY transport's failure. A UDP send only errors
+    // when the socket itself is bad (e.g. it was pinned to a stale peer because
+    // it opened before settings were configured); reopening re-reads the current
+    // ip/port. Without this a broken UDP socket would never self-heal.
+    linkFail( cameraNumber );
     return NETWORK_ERROR;
   }
   return NETWORK_SUCCESS;

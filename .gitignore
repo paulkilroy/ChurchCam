@@ -10,3 +10,4 @@ scad/*.stl
 scad/*.3mf
 .DS_Store
 simulator/wokwigw
+compile_commands.json

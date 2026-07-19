@@ -201,7 +201,9 @@ void writeBytes( uint32_t value, byte packet[], int position );
 void viscaSetup();
 void visca_recall_memory(int);
 void visca_set_memory(int);
-int cameraStatus(int);
+int cameraStatus(int);   // protocol-agnostic dispatcher (CameraControl.cpp)
+int viscaStatus(int);    // VISCA power inquiry (Visca.cpp)
+int onvifStatus(int);    // ONVIF TCP reachability (Onvif.cpp)
 void webSetup();
 void webLoop();
 extern DiscoveredCamera discoveredCameras[MAX_DISCOVERED];
