@@ -45,93 +45,62 @@ static void handleLog(AsyncWebServerRequest* request) {
 }
 */
 
+// The i-th most recent log line (0 = newest). Indices are reduced modulo
+// LOG_SIZE so a wrapped ptr never reads out of bounds.
 struct LogItem getLogItem(uint8_t i) {
-  return LogItems[(uint8_t)(ptr-i)];
+  int idx = ((int)ptr - (i % LOG_SIZE) + LOG_SIZE) % LOG_SIZE;
+  return LogItems[idx];
 }
 
 esp_err_t handleLogData(PsychicRequest* request, PsychicResponse* response) {
-  uint8_t p = ptr;
   String html = "";
-  for ( int i = 0; i < count; i++, p-- ) {
+  for ( int i = 0; i < count; i++ ) {
+    struct LogItem item = getLogItem(i);   // masked ring read (newest first)
     String  cls = "alert-primary";
-    switch (LogItems[p].type) {
+    switch (item.type) {
       case LOG_INFO: cls = "alert-info"; break;
       case LOG_DEBUG: cls = "alert-light"; break;
       case LOG_WARN: cls = "alert-warning"; break;
       case LOG_ERROR: cls = "alert-danger"; break;
     }
     html += "<div class=\"alert " + cls + " mb-1 py-1\" role=\"alert\">";
-    int mills = (int) (LogItems[p].time % 1000);
-    int seconds = (int) (LogItems[p].time / 1000) % 60 ;
-    int minutes = (int) ((LogItems[p].time / (1000*60)) % 60);
-    int hours   = (int) ((LogItems[p].time / (1000*60*60)) % 24);
+    int mills = (int) (item.time % 1000);
+    int seconds = (int) (item.time / 1000) % 60 ;
+    int minutes = (int) ((item.time / (1000*60)) % 60);
+    int hours   = (int) ((item.time / (1000*60*60)) % 24);
     html += String(hours) + ":" + String(minutes) + ":" + String(seconds) + "." + String(mills);
     html += " - ";
-    html += LogItems[p].buf;
+    html += item.buf;
     html += "</div>";
   }
   return response->send(200, "text/html", html.c_str());
 }
 
-void display_i(const char* fmt, ...) {
-  va_list args;
+// Append one formatted line to the log ring. Formatting is done on the caller's
+// stack; only the pointer bump + slot claim run under a brief critical section,
+// so concurrent callers (main loop, WiFi/ETH event task, PsychicHttp task) can't
+// corrupt ptr/count or overwrite each other. ptr is kept in [0, LOG_SIZE) so the
+// uint8_t counter can never index past the array.
+static portMUX_TYPE logMux = portMUX_INITIALIZER_UNLOCKED;
 
-  ptr += 1;  // should wrap around automatically
-  if ( count < LOG_SIZE - 1 ) {
-    count++;
-  }
+static void logAppend(int type, bool toSerial, const char* fmt, va_list args) {
+  char buf[sizeof(LogItems[0].buf)];
+  vsnprintf(buf, sizeof(buf), fmt, args);
 
-  va_start(args, fmt);
-  vsprintf(LogItems[ptr].buf, fmt, args);
-  LogItems[ptr].type = LOG_INFO;
-  LogItems[ptr].time = millis();
+  portENTER_CRITICAL(&logMux);
+  ptr = (ptr + 1) % LOG_SIZE;
+  if ( count < LOG_SIZE - 1 ) count++;
+  uint8_t slot = ptr;
+  portEXIT_CRITICAL(&logMux);
 
-  //Serial.print(LogItems[ptr].buf);
-  va_end(args);
+  strlcpy(LogItems[slot].buf, buf, sizeof(LogItems[slot].buf));
+  LogItems[slot].type = type;
+  LogItems[slot].time = millis();
+
+  if ( toSerial ) Serial.print(buf);
 }
 
-void logd(const char* fmt, ...) {
-  va_list args;
-
-  ptr += 1;  // should wrap around automatically
-  if ( count < LOG_SIZE - 1 ) {
-    count++;
-  }
-  va_start(args, fmt);
-  vsprintf(LogItems[ptr].buf, fmt, args);
-  LogItems[ptr].type = LOG_DEBUG;
-  LogItems[ptr].time = millis();
-  Serial.print(LogItems[ptr].buf);
-  va_end(args);
-}
-
-void logw(const char* fmt, ...) {
-  va_list args;
-
-  ptr += 1;  // should wrap around automatically
-  if ( count < LOG_SIZE - 1 ) {
-    count++;
-  }
-  va_start(args, fmt);
-  vsprintf(LogItems[ptr].buf, fmt, args);
-  LogItems[ptr].type = LOG_WARN;
-  LogItems[ptr].time = millis();
-  Serial.print(LogItems[ptr].buf);
-  va_end(args);
-}
-
-void loge(const char* fmt, ...) {
-  va_list args;
-
-  ptr += 1;  // should wrap around automatically
-  if ( count < LOG_SIZE - 1 ) {
-    count++;
-  }
-  va_start(args, fmt);
-  vsprintf(LogItems[ptr].buf, fmt, args);
-  LogItems[ptr].type = LOG_ERROR;
-  LogItems[ptr].time = millis();
-
-  Serial.print(LogItems[ptr].buf);
-  va_end(args);
-}
+void display_i(const char* fmt, ...) { va_list a; va_start(a, fmt); logAppend(LOG_INFO,  false, fmt, a); va_end(a); }
+void logd(const char* fmt, ...)      { va_list a; va_start(a, fmt); logAppend(LOG_DEBUG, true,  fmt, a); va_end(a); }
+void logw(const char* fmt, ...)      { va_list a; va_start(a, fmt); logAppend(LOG_WARN,  true,  fmt, a); va_end(a); }
+void loge(const char* fmt, ...)      { va_list a; va_start(a, fmt); logAppend(LOG_ERROR, true,  fmt, a); va_end(a); }
