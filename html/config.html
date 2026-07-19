@@ -60,18 +60,18 @@
       { "status": "down", "name": "ATEM Mini Pro", "ip": "10.0.4.40", "port": "-", "protocol": "1" },
     ];
     ATEMCameras = [
-      { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "protocol": "1", "headers": "0" },
-      { "id": "1", "status": "up", "name": "Camera 2", "ip": "10.0.4.62", "port": "60578", "protocol": "0", "headers": "1" },
-      { "id": "2", "status": "off", "name": "H2R", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
-      { "id": "3", "status": "off", "name": "AV PC", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
-      { "id": "4", "status": "off", "name": "Cam5", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
-      { "id": "5", "status": "off", "name": "Cam6", "ip": "0.0.0.0", "port": "0", "protocol": "", "headers": "1" },
-      { "id": "6", "status": "up", "name": "Tracker", "ip": "10.0.4.171", "port": "5678", "protocol": "1", "headers": "0" },
-      { "id": "7", "status": "off", "name": "Cam8", "ip": "0.0.0.0", "port": "0", "protocol": "0", "headers": "1" }
+      { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "1", "headers": "0" },
+      { "id": "1", "status": "up", "name": "Camera 2", "ip": "10.0.4.62", "port": "60578", "type": "0", "transport": "0", "headers": "1" },
+      { "id": "2", "status": "off", "name": "H2R", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
+      { "id": "3", "status": "off", "name": "AV PC", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
+      { "id": "4", "status": "off", "name": "Cam5", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
+      { "id": "5", "status": "off", "name": "Cam6", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" },
+      { "id": "6", "status": "up", "name": "Tracker", "ip": "10.0.4.171", "port": "5678", "type": "1", "transport": "1", "headers": "0" },
+      { "id": "7", "status": "off", "name": "Cam8", "ip": "0.0.0.0", "port": "0", "type": "0", "transport": "0", "headers": "1" }
     ];
     DiscoveredCameras = [
-      { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "protocol": "0", "headers": "1" },
-      { "name": "HD Camera30x", "ip": "10.0.4.62", "port": "60578", "protocol": "0", "headers": "1" }
+      { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "0", "headers": "1" },
+      { "name": "HD Camera30x", "ip": "10.0.4.62", "port": "60578", "type": "0", "transport": "0", "headers": "1" }
     ];
 
     function updateNetworks() {
@@ -152,11 +152,11 @@
           cls = "alert align-items-center alert-dark";
           icon = "#dash-circle-fill";
         }
-        let protocol = "UDP";
-        if (ATEMCameras[i].protocol == "1") {
-          protocol = "TCP";
-        } else if (ATEMCameras[i].protocol == "2") {
+        let protocol;
+        if (ATEMCameras[i].type == "1") {
           protocol = "ONVIF";
+        } else {
+          protocol = ATEMCameras[i].transport == "1" ? "VISCA TCP" : "VISCA UDP";
         }
 
         clone = template.cloneNode(true);
@@ -191,7 +191,8 @@
         template.parentNode.appendChild(clone);
         // document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].name = "camConfigToggle" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].name = "camConfigName" + i;
-        document.querySelectorAll("#" + clone.id + "  #camConfigProtocol")[0].name = "camConfigProtocol" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigType")[0].name = "camConfigType" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigTransport")[0].name = "camConfigTransport" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].name = "camConfigIP" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].name = "camConfigPort" + i;
         // document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].id = "camConfigToggle" + i;
@@ -200,12 +201,15 @@
         // ?? What should the checkmark do? remove it from the status page?
         // or should I jsut get rid of the checkmark and simplify things (yes)
         document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].id = "camConfigName" + i;
-        document.querySelectorAll("#" + clone.id + "  #camConfigProtocol")[0].id = "camConfigProtocol" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigType")[0].id = "camConfigType" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigTransport")[0].id = "camConfigTransport" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].id = "camConfigIP" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].id = "camConfigPort" + i;
 
         document.getElementById("camConfigName" + i).innerHTML = ATEMCameras[i].name;
-        document.getElementById("camConfigProtocol" + i).value = ATEMCameras[i].protocol;
+        document.getElementById("camConfigType" + i).value = ATEMCameras[i].type;
+        document.getElementById("camConfigTransport" + i).value = ATEMCameras[i].transport;
+        onCamTypeChange(document.getElementById("camConfigType" + i));  // apply ONVIF->TCP rule
         document.getElementById("camConfigIP" + i).value = ATEMCameras[i].ip;
         document.getElementById("camConfigPort" + i).value = ATEMCameras[i].port;
       }
@@ -217,7 +221,9 @@
         let a = document.getElementById("dcAtemCam" + i).value;
         if (a != "") {
           //console.log("discovered camera: " + i + " selected atem cam: " + atemCamNum);
-          document.getElementById("camConfigProtocol" + a).value = DiscoveredCameras[i].protocol;
+          document.getElementById("camConfigType" + a).value = DiscoveredCameras[i].type;
+          document.getElementById("camConfigTransport" + a).value = DiscoveredCameras[i].transport;
+          onCamTypeChange(document.getElementById("camConfigType" + a));
           document.getElementById("camConfigIP" + a).value = DiscoveredCameras[i].ip;
           document.getElementById("camConfigPort" + a).value = DiscoveredCameras[i].port;
           //document.getElementById("camConfigHeaders" + a).value = DiscoveredCameras[i].headers;
@@ -354,9 +360,25 @@
 
     function toggleCam(e) {
       var camNum = e.id.replace(/^\D+/g, '');
-      document.getElementById("camConfigProtocol" + camNum).disabled = !e.checked;
+      document.getElementById("camConfigType" + camNum).disabled = !e.checked;
+      document.getElementById("camConfigTransport" + camNum).disabled = !e.checked;
       document.getElementById("camConfigIP" + camNum).disabled = !e.checked;
       document.getElementById("camConfigPort" + camNum).disabled = !e.checked;
+    }
+
+    // ONVIF only speaks over TCP. When a camera's type is ONVIF, force its
+    // transport to TCP and block the UDP option; VISCA can use either. The
+    // transport select stays enabled so its value still posts on submit.
+    function onCamTypeChange(sel) {
+      var transport = document.getElementById(sel.id.replace("Type", "Transport"));
+      if (!transport) return;
+      var udpOpt = transport.querySelector('option[value="0"]');
+      if (sel.value == "1") {          // ONVIF -> TCP only
+        transport.value = "1";
+        if (udpOpt) udpOpt.disabled = true;
+      } else {                         // VISCA -> UDP or TCP
+        if (udpOpt) udpOpt.disabled = false;
+      }
     }
 
     function getLogData() {
@@ -678,12 +700,16 @@
                   -->
                     <div id="camConfigName" class="input-group-text flex-grow-1 col-md-3 col-6" id="basic-addon1">CAM1
                       [ATEM In1]</div>
-                    <div class="col-md-3 col-5 px-0">
-                      <select name="camConfigProtocol" class="form-select" id="camConfigProtocol"> <!-- required -->
-                        <option value="" selected>Protocol</option>
-                        <option value="0">VISCA UDP</option>
-                        <option value="1">VISCA TCP</option>
-                        <option value="2">ONVIF TCP</option>
+                    <div class="col-md-2 col-6 px-0">
+                      <select name="camConfigType" class="form-select" id="camConfigType" onchange="onCamTypeChange(this)">
+                        <option value="0">VISCA</option>
+                        <option value="1">ONVIF</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2 col-6 px-0">
+                      <select name="camConfigTransport" class="form-select" id="camConfigTransport">
+                        <option value="0">UDP</option>
+                        <option value="1">TCP</option>
                       </select>
                     </div>
                     <div class="col-md-3 col-6 px-0">

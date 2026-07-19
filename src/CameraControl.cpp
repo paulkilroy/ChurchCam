@@ -15,7 +15,6 @@ WebSocketServer webSocketServer { 3000 };
 
 #define ANALOG_RESOLUTION 12
 int AnalogMax = pow(2, ANALOG_RESOLUTION) - 1;
-#define IS_ACTIVE(X) ((X > AnalogMax/2*.85) && (X < AnalogMax/2*1.15))
 #define DEADZONE_SIZE (AnalogMax * THRESHOLD)
 
 // int NoJoystick = 1;  // Just in case
@@ -38,28 +37,16 @@ void cameraControlSetup() {
   analogReadResolution(ANALOG_RESOLUTION);  // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
   //analogSetAttenuation(ADC_6db); // Default is 11db which is very noisy. Recommended to use 2.5 or 6.
 
-  for ( HWRev = 0; HWRev < REV_MODELS; HWRev++ ) {
-    pinMode(Pinouts[HWRev].tilt, INPUT);
-    pinMode(Pinouts[HWRev].pan, INPUT);
-    pinMode(Pinouts[HWRev].zoom, INPUT);
+  // Olimex is the only real board; the Wokwi simulator uses its own pinout.
+  HWRev = InSimulator ? REV_SIM : REV_OLIMEX;
+  logi("Board: [%d] %s", HWRev, Pinouts[HWRev].name);
 
-    int pan = analogRead(Pinouts[HWRev].pan);
-    int tilt = analogRead(Pinouts[HWRev].tilt);
-    int zoom = analogRead(Pinouts[HWRev].zoom);
-
-    if ( IS_ACTIVE(pan) && IS_ACTIVE(tilt) && IS_ACTIVE(zoom) ) {
-      pinMode(Pinouts[HWRev].recall1, INPUT_PULLUP);
-      pinMode(Pinouts[HWRev].recall2, INPUT_PULLUP);
-      pinMode(Pinouts[HWRev].oride, INPUT_PULLUP);
-      logi("Detected Hardware Version: [%d] %s - %d %d %d", HWRev, Pinouts[HWRev].name, pan, tilt, zoom);
-      break;
-    }
-    logi("Skipping HWRev  %s - %d %d %d", Pinouts[HWRev].name, pan, tilt, zoom);
-  }
-  if ( HWRev == REV_MODELS ) {
-    logi("ERROR: HWRev not found, defaulting to first board");
-    HWRev = 0;
-  }
+  pinMode(PIN_PAN, INPUT);
+  pinMode(PIN_TILT, INPUT);
+  pinMode(PIN_ZOOM, INPUT);
+  pinMode(PIN_RECALL_1, INPUT_PULLUP);
+  pinMode(PIN_RECALL_2, INPUT_PULLUP);
+  pinMode(PIN_OVERRIDE, INPUT_PULLUP);
 
   setupDefaults();
   viscaSetup();
@@ -92,19 +79,27 @@ boolean overridePreview() {
 // so no one accidentally moves the camera that is currently live. But if the "override" button is currently pressed (held down)
 // then the camera that is on program will be selected for ptz movement or recall
 int getActiveCamera() {
+  int cam;
   if ( !atemSwitcher.isConnected() ) {
     // default to cam 1
-    if ( !overridePreview() ) {
-      return 0;
-    } else {
-      return 1;
-    }
+    cam = overridePreview() ? 1 : 0;
   } else if ( overridePreview() ) {
     //Serial.printf("atem: %d - %d\n", atemSwitcher.getPreviewInputVideoSource(0), atemSwitcher.getProgramInputVideoSource(0));
-    return atemSwitcher.getProgramInputVideoSource(0) - 1;
+    cam = atemSwitcher.getProgramInputVideoSource(0) - 1;
   } else {
-    return atemSwitcher.getPreviewInputVideoSource(0) - 1;
+    cam = atemSwitcher.getPreviewInputVideoSource(0) - 1;
   }
+  // Clamp to a valid camera index. ATEM source 0 (black/none) yields -1, which
+  // would index settings.cameraType[-1]/cameraIP[-1] out of bounds downstream.
+  if ( cam < 0 ) cam = 0;
+  if ( cam >= NUM_CAMERAS ) cam = NUM_CAMERAS - 1;
+  return cam;
+}
+
+// VISCA cameras are driven via ptzDrive/visca_send (transport picked per camera
+// in CameraLink); ONVIF cameras use the Onvif_* path instead.
+static bool isVisca(int cam) {
+  return settings.cameraType[cam] == CAM_VISCA;
 }
 
 // move to visca code 
@@ -139,16 +134,16 @@ void buttonLoop() {
     endPress = millis();
     if ((endPress - startPress) > LONG_PRESS_TIME) {
       logi("Long press on button 1: setting preset 1");
-      if (settings.cameraProtocol[getActiveCamera()] == VISCA_PROTOCOL_TCP) {
+      if (isVisca(getActiveCamera())) {
         visca_set_memory(1);
-      } else if (settings.cameraProtocol[getActiveCamera()] == ONVIF_PROTOCOL_TCP) {
+      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
         Onvif_SetPreset(1);
       }
     } else {
       logi("Short press on button 1: going to preset 1");
-      if (settings.cameraProtocol[getActiveCamera()] == VISCA_PROTOCOL_TCP) {
+      if (isVisca(getActiveCamera())) {
         visca_recall_memory(1);
-      } else if (settings.cameraProtocol[getActiveCamera()] == ONVIF_PROTOCOL_TCP) {
+      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
         Onvif_GoToPreset(1);
       }
     }
@@ -160,16 +155,16 @@ void buttonLoop() {
     endPress = millis();
     if ((endPress - startPress) > LONG_PRESS_TIME) {
       logi("Long press on button 2: setting preset 2");
-      if (settings.cameraProtocol[getActiveCamera()] == VISCA_PROTOCOL_TCP) {
+      if (isVisca(getActiveCamera())) {
         visca_set_memory(2);
-      } else if (settings.cameraProtocol[getActiveCamera()] == ONVIF_PROTOCOL_TCP) {
+      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
         Onvif_SetPreset(2);
       }
     } else {
       logi("Short press on button 2: going to preset 2");
-      if (settings.cameraProtocol[getActiveCamera()] == VISCA_PROTOCOL_TCP) {
+      if (isVisca(getActiveCamera())) {
         visca_recall_memory(2);
-      } else if (settings.cameraProtocol[getActiveCamera()] == ONVIF_PROTOCOL_TCP) {
+      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
         Onvif_GoToPreset(2);
       }
     }
@@ -213,9 +208,9 @@ void cameraControlLoop() {
   if ( ( panSpeed == 0 && tiltSpeed == 0 && zoomSpeed == 0 ) || ( currentSendTime > LastSendTime + MAX_SEND ) ) {
     // TODO Separate out panTilt and zoom, then put repeate check by message type in 
     // the visca send function
-    if (settings.cameraProtocol[getActiveCamera()] == VISCA_PROTOCOL_TCP) {
+    if (isVisca(getActiveCamera())) {
       ptzDrive(panSpeed, tiltSpeed, zoomSpeed);
-    } else if (settings.cameraProtocol[getActiveCamera()] == ONVIF_PROTOCOL_TCP) {
+    } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
       Onvif_PtzDrive(panSpeed, tiltSpeed, zoomSpeed);
     }
     LastSendTime = currentSendTime;

@@ -10,6 +10,15 @@
 #include <math.h>
 
 #include "globals.h"
+
+// Arduino_GFX 1.6.x renamed the basic colour macros to RGB565_*; keep the
+// short names this file uses.
+#define BLACK  RGB565_BLACK
+#define WHITE  RGB565_WHITE
+#define RED    RGB565_RED
+#define GREEN  RGB565_GREEN
+#define YELLOW RGB565_YELLOW
+
 bool DebugDisplay = false;
 
 
@@ -165,21 +174,12 @@ void displaySetup() {
   GFX_EXTRA_PRE_INIT();
   #endif
 
-  if ( !InSimulator ) {
-    
-    //Arduino_GFX *gfx_chip = new Arduino_ST7735(
-    //bus, TFT_RST /* RST */, 1 /* rotation */, false /* IPS */,
-    //128 /* width */, 160 /* height */,
-   // 0 /* col offset 1 */, 0 /* row offset 1 */,
-   // 0 /* col offset 2 */, 0 /* row offset 2 */,
-   // false /* BGR */); 
+  // Same double-buffered canvas on hardware and in the simulator: displayLoop()
+  // draws into the Arduino_Canvas_Indexed framebuffer and flush()es one frame to
+  // the panel. A direct (un-buffered) panel here flickers, because every frame
+  // starts with fillScreen(BLACK) on the live display.
   Arduino_GFX *gfx_chip = new Arduino_ILI9341(bus, TFT_RST /* RST */, 3 /* rotation */, false /* IPS */);
   gfx = new Arduino_Canvas_Indexed(320 /* width */, 240 /* height */, gfx_chip, 0, 0, 0);
-
-    
-  } else {
-    gfx = new Arduino_ILI9341(bus, TFT_RST, 1, false);
-  }
 
   // Init Display
   if (!gfx->begin()) {

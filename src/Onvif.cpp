@@ -1,6 +1,8 @@
 #include "globals.h"
 #include <string.h>
 #include <time.h>
+#include <lwip/sockets.h>
+#include <errno.h>
 
 // https://blog.devmobile.co.nz/2021/08/26/security-camera-onvif-discovery/
 
@@ -200,24 +202,24 @@ void onvif_setup() {
 
 void onvif_send( int cameraNumber ) {
     //byte messageBuf[2048];
-    if (NETWORK_SUCCESS != connect(cameraNumber)) {
+    if (NETWORK_SUCCESS != camConnect(cameraNumber)) {
         //VISCA_ERROR("E97");
         logi("Onvif could not connect");
     }
 
-    if (NETWORK_SUCCESS != send(cameraNumber, (byte*)messageBuf, strlen(messageBuf))) {
+    if (NETWORK_SUCCESS != camSend(cameraNumber, (byte*)messageBuf, strlen(messageBuf))) {
         //VISCA_ERROR("E96");
         logi("Onvif could not send");
     }
     //logi("Message sent: %s", messageBuf);
 
-    if (NETWORK_SUCCESS != recieve(cameraNumber, (byte*)messageBuf)) {
+    if (NETWORK_SUCCESS != camRecv(cameraNumber, (byte*)messageBuf, sizeof(messageBuf))) {
         logi("Unable to get response");
     } else {
         //logi("Message Recieved: %s", messageBuf);
     }
 
-    closeConnection(cameraNumber);
+    camClose(cameraNumber);
 }
 
 void initialize() {
@@ -344,6 +346,125 @@ void Onvif_PtzDrive( int panSpeed, int tiltSpeed, int zoomSpeed ) {
     // closing the connected socket
     close(client_fd);
     */
+}
+
+// ---------------------------------------------------------------------------
+// ONVIF WS-Discovery client. Multicasts a Probe to 239.255.255.250:3702 and
+// collects ProbeMatch replies. Each reply's <XAddrs> URL carries the camera's
+// ip:port, so several ONVIF cameras can share one IP on different ports.
+// Appends to discoveredCameras[]. Blocks the loop ~2s (manual "Discover" only).
+// ---------------------------------------------------------------------------
+static const char wsDiscoveryProbe[] =
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+"<e:Envelope xmlns:e=\"http://www.w3.org/2003/05/soap-envelope\" "
+"xmlns:w=\"http://schemas.xmlsoap.org/ws/2004/08/addressing\" "
+"xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\" "
+"xmlns:dn=\"http://www.onvif.org/ver10/network/wsdl\">"
+"<e:Header>"
+"<w:MessageID>urn:uuid:churchcam-%08x</w:MessageID>"
+"<w:To e:mustUnderstand=\"true\">urn:schemas-xmlsoap-org:ws:2005:04:discovery</w:To>"
+"<w:Action mustUnderstand=\"true\">http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</w:Action>"
+"</e:Header>"
+"<e:Body><d:Probe><d:Types>dn:NetworkVideoTransmitter</d:Types></d:Probe></e:Body>"
+"</e:Envelope>";
+
+// Pull ip+port from the first http:// URL in a ProbeMatch (<XAddrs>). Port
+// always comes from the URL; IP comes from the URL when it is a literal,
+// otherwise the caller's source IP is kept.
+static void parseXAddr(const char *body, IPAddress &ip, uint16_t &port) {
+  const char *h = strstr(body, "http://");
+  if (!h) return;
+  h += 7;
+  char host[64];
+  int i = 0;
+  while (*h && *h != ':' && *h != '/' && *h != '<' && *h != ' ' && i < 63) host[i++] = *h++;
+  host[i] = 0;
+  if (*h == ':') port = atoi(h + 1);
+  IPAddress parsed;
+  if (parsed.fromString(host)) ip = parsed;
+}
+
+// Optional friendly name from a Scopes ".../name/<x>" token.
+static void parseScopeName(const char *body, char *out, size_t cap) {
+  strlcpy(out, "ONVIF Camera", cap);
+  const char *n = strstr(body, "/name/");
+  if (!n) return;
+  n += 6;
+  size_t i = 0;
+  while (n[i] && n[i] != ' ' && n[i] != '<' && n[i] != '/' && i < cap - 1) { out[i] = n[i]; i++; }
+  if (i) out[i] = 0;
+}
+
+int discoverOnvifCameras() {
+  int fd = lwip_socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (fd < 0) { loge("ONVIF discovery: socket() failed\n"); return 0; }
+
+  // Bind an ephemeral local port so unicast replies come back to us.
+  struct sockaddr_in local;
+  memset(&local, 0, sizeof local);
+  local.sin_family = AF_INET;
+  local.sin_addr.s_addr = htonl(INADDR_ANY);
+  local.sin_port = 0;
+  lwip_bind(fd, (struct sockaddr *)&local, sizeof local);
+
+  // Route multicast out the active interface (ETH on the PoE board) and join
+  // the group so we also catch any multicast ProbeMatch replies.
+  IPAddress lip = localIP();
+  IPAddress mcast(239, 255, 255, 250);
+  struct in_addr mif;
+  mif.s_addr = (uint32_t)lip;
+  lwip_setsockopt(fd, IPPROTO_IP, IP_MULTICAST_IF, &mif, sizeof mif);
+  uint8_t ttl = 2;
+  lwip_setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof ttl);
+  struct ip_mreq mreq;
+  mreq.imr_multiaddr.s_addr = (uint32_t)mcast;
+  mreq.imr_interface.s_addr = (uint32_t)lip;
+  lwip_setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof mreq);
+
+  struct timeval tv;
+  tv.tv_sec = 0;
+  tv.tv_usec = 300000;   // 300ms per recv; total window bounded below
+  lwip_setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+
+  struct sockaddr_in dst;
+  memset(&dst, 0, sizeof dst);
+  dst.sin_family = AF_INET;
+  dst.sin_port = htons(3702);
+  dst.sin_addr.s_addr = (uint32_t)mcast;
+
+  char probe[900];
+  snprintf(probe, sizeof probe, wsDiscoveryProbe, (unsigned)millis());
+  logi("ONVIF WS-Discovery: probing %s:3702 via %s", mcast.toString().c_str(), lip.toString().c_str());
+  lwip_sendto(fd, probe, strlen(probe), 0, (struct sockaddr *)&dst, sizeof dst);
+
+  int found = 0;
+  char buf[1500];
+  uint32_t start = millis();
+  while (millis() - start < 2000) {
+    struct sockaddr_in from;
+    socklen_t fl = sizeof from;
+    memset(&from, 0, sizeof from);
+    int len = lwip_recvfrom(fd, buf, sizeof(buf) - 1, 0, (struct sockaddr *)&from, &fl);
+    if (len <= 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) continue;   // recv timeout, keep waiting
+      break;
+    }
+    buf[len] = 0;
+    if (!strstr(buf, "ProbeMatch")) continue;
+
+    IPAddress ip = IPAddress(from.sin_addr.s_addr);
+    uint16_t port = 80;
+    parseXAddr(buf, ip, port);
+    char name[24];
+    parseScopeName(buf, name, sizeof name);
+    if (addDiscovered(ip, port, CAM_ONVIF, CAM_TCP, name)) {
+      logi("ONVIF camera: %s:%u \"%s\"", ip.toString().c_str(), port, name);
+      found++;
+    }
+  }
+  lwip_close(fd);
+  logi("ONVIF discovery found %d camera(s)", found);
+  return found;
 }
 
 /* GotoPreset??

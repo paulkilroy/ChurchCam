@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChurchCam Simulator</title>
+<style>
+  :root {
+    --bg: #0d1114; --panel: #161d21; --line: #263036; --ink: #e7eef0; --muted: #8397a0;
+    --pgm: #e5484d; --pvw: #30a46c; --accent: #3ba3b8;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); }
+  header {
+    display: flex; align-items: center; gap: .8rem; padding: .7rem 1.1rem;
+    border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 1rem; margin: 0; font-weight: 700; letter-spacing: .01em; }
+  header .sub { color: var(--muted); font-size: .78rem; font-family: var(--mono); }
+  .dot { width: .55rem; height: .55rem; border-radius: 50%; background: #555; display: inline-block; }
+  .dot.live { background: var(--pvw); box-shadow: 0 0 8px var(--pvw); }
+  main { max-width: 1080px; margin: 0 auto; padding: 1rem 1.1rem 2rem; }
+
+  /* ATEM panel */
+  .atem {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: .9rem 1rem; margin-bottom: 1rem;
+  }
+  .atem .label { font-family: var(--mono); font-size: .7rem; letter-spacing: .18em; color: var(--muted); text-transform: uppercase; }
+  .busrow { display: grid; grid-template-columns: 3.2rem 1fr; align-items: center; gap: .7rem; margin-top: .55rem; }
+  .busrow .cap { font-family: var(--mono); font-size: .72rem; font-weight: 700; letter-spacing: .08em; }
+  .busrow.pgm .cap { color: var(--pgm); } .busrow.pvw .cap { color: var(--pvw); }
+  .btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
+  .btns button {
+    font-family: var(--mono); font-weight: 700; font-size: .95rem; color: var(--ink);
+    background: #1e262b; border: 1px solid var(--line); border-radius: 7px; padding: .7rem 0;
+    cursor: pointer; transition: transform .05s, background .1s, box-shadow .15s;
+  }
+  .btns button:hover { background: #232d33; }
+  .btns button:active { transform: translateY(1px); }
+  .busrow.pgm button.on { background: var(--pgm); border-color: var(--pgm); color: #fff; box-shadow: 0 0 14px rgba(229,72,77,.5); }
+  .busrow.pvw button.on { background: var(--pvw); border-color: var(--pvw); color: #fff; box-shadow: 0 0 14px rgba(48,163,108,.45); }
+  .hint { color: var(--muted); font-size: .74rem; margin-top: .7rem; }
+
+  /* Camera grid */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .cam {
+    position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+    background: #000; aspect-ratio: 16 / 10; transition: box-shadow .12s, border-color .12s;
+  }
+  .cam.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 18px rgba(59,163,184,.35); }
+  .cam canvas { width: 100%; height: 100%; display: block; }
+  .overlay { position: absolute; inset: 0; pointer-events: none; padding: .55rem .65rem;
+    display: flex; flex-direction: column; justify-content: space-between; font-family: var(--mono); }
+  .row { display: flex; align-items: center; gap: .4rem; }
+  .row.top { justify-content: space-between; }
+  .badge { font-size: .62rem; font-weight: 700; letter-spacing: .06em; padding: .16rem .4rem; border-radius: 4px;
+    background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.15); }
+  .badge.visca { color: #7cc7ff; } .badge.onvif { color: #c99bff; }
+  .tally { font-size: .62rem; font-weight: 800; letter-spacing: .08em; padding: .16rem .45rem; border-radius: 4px; opacity: 0; }
+  .tally.pgm { background: var(--pgm); color: #fff; opacity: 1; }
+  .tally.pvw { background: var(--pvw); color: #fff; opacity: 1; }
+  .name { font-size: .72rem; font-weight: 700; text-shadow: 0 1px 3px #000; }
+  .ptz { font-size: .64rem; color: #cfe0e6; background: rgba(0,0,0,.5); padding: .16rem .4rem; border-radius: 4px; }
+  .moving { color: var(--accent); }
+  .flash { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    font-family: var(--mono); font-weight: 800; font-size: 1rem; color: #fff; text-shadow: 0 2px 8px #000;
+    background: rgba(0,0,0,.5); padding: .4rem .8rem; border-radius: 6px; opacity: 0; transition: opacity .2s; }
+</style>
+</head>
+<body>
+<header>
+  <span id="conn" class="dot"></span>
+  <h1>ChurchCam Simulator</h1>
+  <span class="sub">4 cameras · virtual ATEM Mini</span>
+</header>
+
+<main>
+  <div class="atem">
+    <div class="label">ATEM Mini</div>
+    <div class="busrow pgm"><span class="cap">PGM</span><div class="btns" id="pgm"></div></div>
+    <div class="busrow pvw"><span class="cap">PVW</span><div class="btns" id="pvw"></div></div>
+    <div class="hint">PTZ follows the <b>Preview</b> camera (or <b>Program</b> when the override button is held on the controller). Pick a Preview camera, then move the joystick.</div>
+  </div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<script>
+const VIEWS = [
+  { proto: 'VISCA', sub: 'UDP',  hue: 205 },
+  { proto: 'VISCA', sub: 'TCP',  hue: 280 },
+  { proto: 'ONVIF', sub: 'HTTP', hue: 150 },
+  { proto: 'ONVIF', sub: 'HTTP', hue: 32  },
+];
+const WORLD_W = 2000, WORLD_H = 1000;
+const RATE = { pan: 1.1, tilt: 0.9, zoom: 0.7 };   // units per second at velocity 1
+
+const cams = VIEWS.map((v, i) => ({
+  ...v, id: i,
+  pan: 0, tilt: 0, zoom: 0.15,
+  vpan: 0, vtilt: 0, vzoom: 0,
+  presets: {}, tween: null,
+  lastActivity: 0, flashUntil: 0, flashText: '',
+  el: null, ctx: null, dpr: 1,
+}));
+
+// ---- build DOM ----
+const grid = document.getElementById('grid');
+cams.forEach((c) => {
+  const wrap = document.createElement('div');
+  wrap.className = 'cam';
+  wrap.innerHTML = `
+    <canvas></canvas>
+    <div class="overlay">
+      <div class="row top">
+        <span class="badge ${c.proto.toLowerCase()}">${c.proto} · ${c.sub}</span>
+        <span class="tally" data-tally></span>
+      </div>
+      <div class="row" style="justify-content:space-between">
+        <span class="name">Camera ${c.id + 1}</span>
+        <span class="ptz" data-ptz></span>
+      </div>
+    </div>
+    <div class="flash" data-flash></div>`;
+  grid.appendChild(wrap);
+  c.wrap = wrap;
+  c.canvas = wrap.querySelector('canvas');
+  c.ctx = c.canvas.getContext('2d');
+  c.tallyEl = wrap.querySelector('[data-tally]');
+  c.ptzEl = wrap.querySelector('[data-ptz]');
+  c.flashEl = wrap.querySelector('[data-flash]');
+});
+
+function sizeCanvases() {
+  cams.forEach((c) => {
+    const r = c.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    c.dpr = dpr; c.w = r.width; c.h = r.height;
+    c.canvas.width = Math.round(r.width * dpr);
+    c.canvas.height = Math.round(r.height * dpr);
+  });
+}
+window.addEventListener('resize', sizeCanvases);
+
+// ---- ATEM buttons ----
+let atemState = { program: 1, preview: 2 };
+function buildBus(id, bus) {
+  const host = document.getElementById(id);
+  for (let i = 1; i <= 4; i++) {
+    const b = document.createElement('button');
+    b.textContent = i;
+    b.onclick = () => fetch('/atem/' + bus, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: i }),
+    });
+    host.appendChild(b);
+  }
+}
+buildBus('pgm', 'program');
+buildBus('pvw', 'preview');
+function renderAtem() {
+  document.querySelectorAll('#pgm button').forEach((b, i) => b.classList.toggle('on', i + 1 === atemState.program));
+  document.querySelectorAll('#pvw button').forEach((b, i) => b.classList.toggle('on', i + 1 === atemState.preview));
+  cams.forEach((c) => {
+    const t = c.tallyEl;
+    t.className = 'tally';
+    if (c.id + 1 === atemState.program) { t.classList.add('pgm'); t.textContent = 'PGM'; }
+    else if (c.id + 1 === atemState.preview) { t.classList.add('pvw'); t.textContent = 'PVW'; }
+    else t.textContent = '';
+  });
+}
+
+// ---- SSE ----
+const connDot = document.getElementById('conn');
+function connect() {
+  const es = new EventSource('/events');
+  es.onopen = () => connDot.classList.add('live');
+  es.onerror = () => connDot.classList.remove('live');
+  es.onmessage = (e) => {
+    let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+    if (m.kind === 'hello') { if (window._boot && window._boot !== m.boot) location.reload(); else window._boot = m.boot; return; }
+    if (m.kind === 'atem') { atemState = { program: m.program, preview: m.preview }; renderAtem(); return; }
+    const c = cams[m.cam]; if (!c) return;
+    c.lastActivity = performance.now();
+    if (m.kind === 'pt') { c.vpan = m.pan; c.vtilt = m.tilt; c.tween = null; }
+    else if (m.kind === 'zoom') { c.vzoom = m.zoom; c.tween = null; }
+    else if (m.kind === 'stopall') { c.vpan = c.vtilt = c.vzoom = 0; }
+    else if (m.kind === 'preset') {
+      if (m.action === 'set') { c.presets[m.n] = { pan: c.pan, tilt: c.tilt, zoom: c.zoom }; flash(c, 'PRESET ' + m.n + ' SET'); }
+      else { const p = c.presets[m.n] || { pan: 0, tilt: 0, zoom: 0.15 };
+             c.tween = { from: { pan: c.pan, tilt: c.tilt, zoom: c.zoom }, to: p, t0: performance.now(), dur: 700 };
+             c.vpan = c.vtilt = c.vzoom = 0; flash(c, 'PRESET ' + m.n); }
+    }
+  };
+}
+function flash(c, text) { c.flashText = text; c.flashUntil = performance.now() + 900; }
+connect();
+
+// ---- physics + render loop ----
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  for (const c of cams) {
+    if (c.tween) {
+      const k = Math.min(1, (now - c.tween.t0) / c.tween.dur);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; // easeInOut
+      c.pan = lerp(c.tween.from.pan, c.tween.to.pan, e);
+      c.tilt = lerp(c.tween.from.tilt, c.tween.to.tilt, e);
+      c.zoom = lerp(c.tween.from.zoom, c.tween.to.zoom, e);
+      if (k >= 1) c.tween = null;
+    } else {
+      c.pan = clamp(c.pan + c.vpan * RATE.pan * dt, -1, 1);
+      c.tilt = clamp(c.tilt + c.vtilt * RATE.tilt * dt, -1, 1);
+      c.zoom = clamp(c.zoom + c.vzoom * RATE.zoom * dt, 0, 1);
+    }
+    draw(c, now);
+  }
+  requestAnimationFrame(frame);
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+function draw(c, now) {
+  const ctx = c.ctx, W = c.canvas.width, H = c.canvas.height;
+  const visW = lerp(900, 300, c.zoom);   // narrower view -> more dramatic pan/tilt/zoom
+  const scale = W / visW;
+  const visH = H / scale;
+  const maxPanX = (WORLD_W - visW) / 2;
+  const maxPanY = (WORLD_H - visH) / 2;
+  const cx = WORLD_W / 2 + c.pan * maxPanX;
+  const cy = WORLD_H * 0.46 - c.tilt * maxPanY;
+
+  ctx.setTransform(scale, 0, 0, scale, W / 2 - cx * scale, H / 2 - cy * scale);
+  drawWorld(ctx, c);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+  // overlays
+  const moving = c.vpan || c.vtilt || c.vzoom || c.tween;
+  c.ptzEl.className = 'ptz' + (moving ? ' moving' : '');
+  c.ptzEl.textContent = `P${sgn(c.pan)} T${sgn(c.tilt)} Z${Math.round(c.zoom * 100)}%`;
+  c.wrap.classList.toggle('active', now - c.lastActivity < 350);
+  if (now < c.flashUntil) { c.flashEl.textContent = c.flashText; c.flashEl.style.opacity = 1; }
+  else c.flashEl.style.opacity = 0;
+}
+function sgn(v) { const n = Math.round(v * 100); return (n >= 0 ? '+' : '') + n; }
+
+function drawWorld(ctx, c) {
+  const hue = c.hue;
+  // wall gradient
+  const g = ctx.createLinearGradient(0, 0, 0, WORLD_H);
+  g.addColorStop(0, `hsl(${hue},18%,26%)`);
+  g.addColorStop(0.62, `hsl(${hue},16%,17%)`);
+  g.addColorStop(0.62, `hsl(${hue},12%,12%)`);
+  g.addColorStop(1, `hsl(${hue},10%,8%)`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+  const floorY = WORLD_H * 0.62;
+  // side columns
+  ctx.fillStyle = `hsl(${hue},14%,${'22'}%)`;
+  for (const x of [70, WORLD_W - 130]) ctx.fillRect(x, 40, 60, floorY - 40);
+
+  // arched stained-glass windows
+  const N = 8, gap = WORLD_W / N;
+  for (let i = 0; i < N; i++) {
+    const wx = gap * i + gap / 2;
+    drawWindow(ctx, wx, floorY * 0.5, gap * 0.42, floorY * 0.62, (hue + i * 24) % 360);
+  }
+
+  // central platform + cross
+  const px = WORLD_W / 2;
+  ctx.fillStyle = `hsl(${hue},20%,30%)`;
+  ctx.fillRect(px - 180, floorY - 10, 360, 40);
+  ctx.fillStyle = `hsl(${hue},22%,38%)`;
+  ctx.fillRect(px - 120, floorY - 120, 240, 110);
+  ctx.fillStyle = `hsl(${hue},30%,62%)`;
+  ctx.fillRect(px - 14, floorY - 320, 28, 150);   // cross vertical
+  ctx.fillRect(px - 70, floorY - 268, 140, 26);   // cross horizontal
+
+  // floor + pews
+  ctx.fillStyle = `hsl(${hue},10%,10%)`;
+  ctx.fillRect(0, floorY, WORLD_W, WORLD_H - floorY);
+  ctx.strokeStyle = `hsla(${hue},20%,55%,.35)`;
+  ctx.lineWidth = 6;
+  for (let i = 1; i <= 5; i++) {
+    const y = floorY + 40 + i * 62;
+    const spread = i * 60;
+    ctx.beginPath();
+    ctx.moveTo(px - 300 - spread, y);
+    ctx.lineTo(px - 40, y);
+    ctx.moveTo(px + 40, y);
+    ctx.lineTo(px + 300 + spread, y);
+    ctx.stroke();
+  }
+
+  // pan ruler ticks along the very top
+  ctx.fillStyle = `hsla(${hue},15%,70%,.5)`;
+  for (let x = 0; x <= WORLD_W; x += 100) ctx.fillRect(x, 0, 3, x % 500 === 0 ? 26 : 14);
+
+  // big watermark number
+  ctx.fillStyle = `hsla(${hue},30%,85%,.06)`;
+  ctx.font = 'bold 520px ' + getComputedStyle(document.body).fontFamily;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(c.id + 1), px, floorY * 0.52);
+}
+function drawWindow(ctx, cx, cy, w, h, hue) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = `hsl(${hue},45%,20%)`;
+  ctx.fillRect(-w / 2 - 10, -h / 2 - 10, w + 20, h + 20);
+  // arch
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, h / 2);
+  ctx.lineTo(-w / 2, -h / 2 + w / 2);
+  ctx.arc(0, -h / 2 + w / 2, w / 2, Math.PI, 0);
+  ctx.lineTo(w / 2, h / 2);
+  ctx.closePath();
+  const grd = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+  grd.addColorStop(0, `hsl(${hue},70%,60%)`);
+  grd.addColorStop(0.5, `hsl(${(hue + 40) % 360},65%,45%)`);
+  grd.addColorStop(1, `hsl(${(hue + 80) % 360},60%,35%)`);
+  ctx.fillStyle = grd; ctx.fill();
+  // mullions
+  ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(0, -h / 2 + w / 2); ctx.lineTo(0, h / 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-w / 2, 0); ctx.lineTo(w / 2, 0); ctx.stroke();
+  ctx.restore();
+}
+
+sizeCanvases();
+renderAtem();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -31,20 +31,32 @@ extern WebSocketServer webSocketServer;
 
 #define AP_SSID "ptz-setup"
 
-#define REV_MODELS 4
+// Board pinouts: the real hardware (Olimex ESP32-PoE) and the Wokwi simulator.
+// Selected directly from InSimulator -- no auto-detection.
+#define REV_MODELS 2
+#define REV_OLIMEX 0
+#define REV_SIM    1
 
 #define NETWORK_ERROR 0
 #define NETWORK_SUCCESS 1
 #define NETWORK_TIMEOUT -1
 #define VISCA_PORT 52381 // or the PTZ / HuddleCam port of 1259 w/o headers
+#define VISCA_RESPONSE_SIZE 256 // size contract for VISCA response buffers
 #define CAMERA_UP 1
 #define CAMERA_DOWN 2
 #define CAMERA_OFF 3
 #define CAMERA_NA 4
 
-#define ONVIF_PROTOCOL_TCP    2
-#define VISCA_PROTOCOL_TCP    1
-#define VISCA_PROTOCOL_UDP    0
+// Camera command dialect and network transport are two independent settings.
+#define CAM_VISCA 0
+#define CAM_ONVIF 1
+#define CAM_UDP   0
+#define CAM_TCP   1
+
+// EEPROM settings header. Bump SETTINGS_VERSION on any Settings layout change so
+// old/blank EEPROM is detected and reset to defaults instead of read as garbage.
+#define SETTINGS_MAGIC   0x43436D31u  // "CCm1"
+#define SETTINGS_VERSION 1
 
 #define BOARD_NAME Pinouts[HWRev].name       // Board
 #define PIN_TILT Pinouts[HWRev].tilt         // Yellow
@@ -75,6 +87,9 @@ struct Pinouts_S {
 
 //Define sturct for holding PTZ settings (mostly to simplify EEPROM read and write, in order to persist settings)
 struct Settings {
+  uint32_t magic;    // SETTINGS_MAGIC + SETTINGS_VERSION validate the EEPROM blob
+  uint16_t version;
+
   char ssid[32];
   char psk[32];
 
@@ -100,10 +115,9 @@ struct Settings {
 // Cameras + 1 below for hidden broadcast camera
 #define NUM_CAMERAS 20
 #define CAMERA_BROADCAST NUM_CAMERAS
-#define PROTOCOL_UDP 0
-#define PROTOCOL_TCP 1
   IPAddress cameraIP[NUM_CAMERAS + 1];
-  uint8_t cameraProtocol[NUM_CAMERAS + 1];
+  uint8_t cameraType[NUM_CAMERAS + 1];       // CAM_VISCA | CAM_ONVIF
+  uint8_t cameraTransport[NUM_CAMERAS + 1];  // CAM_UDP   | CAM_TCP
   uint16_t cameraPort[NUM_CAMERAS + 1];
   uint8_t cameraHeaders[NUM_CAMERAS + 1];
 };
@@ -114,12 +128,22 @@ struct LogItem {
   char buf[256];
 };
 
+// A camera found by auto-discovery (VISCA broadcast or ONVIF WS-Discovery).
+// Cameras are identified by ip+port, so multiple cameras may share one IP.
+struct DiscoveredCamera {
+  IPAddress ip;
+  uint16_t  port;
+  uint8_t   type;       // CAM_VISCA | CAM_ONVIF
+  uint8_t   transport;  // CAM_UDP   | CAM_TCP
+  char      name[24];
+};
+#define MAX_DISCOVERED 16
+
 extern bool FirstTimeSetup;
 extern int HWRev;
 extern int AnalogMax;
 extern ATEMmin atemSwitcher;
 extern char ssid[];
-extern WiFiUDP udp;
 extern bool InSimulator;
 extern WebServer srvr;
 extern struct Pinouts_S Pinouts[];
@@ -180,17 +204,23 @@ void visca_set_memory(int);
 int cameraStatus(int);
 void webSetup();
 void webLoop();
-int discoverCameras();
-String discoveredCameraName(int i);
-IPAddress discoveredCameraIP(int i);
+extern DiscoveredCamera discoveredCameras[MAX_DISCOVERED];
+extern int numDiscoveredCameras;
+void resetDiscovered();
+bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport, const char *name);
+int discoverCameras();        // VISCA broadcast probe (appends to discoveredCameras)
+int discoverOnvifCameras();   // ONVIF WS-Discovery (appends to discoveredCameras)
 boolean overridePreview();
 
 void networkSetup();
+void networkServicesLoop();
 
-int connect( int cameraNumber );
-int send( int cameraNumber, byte packet[], int size );
-int recieve( int cameraNumber, byte packet[] );
-void closeConnection( int cameraNumber );
+int camConnect( int cameraNumber );
+int camSend( int cameraNumber, byte packet[], int size );
+int camRecv( int cameraNumber, byte packet[], size_t cap );
+void camClose( int cameraNumber );
+IPAddress camRemoteIP( int cameraNumber );
+uint16_t camRemotePort( int cameraNumber );
 
 void Onvif_SetPreset(int presetNumber);
 void Onvif_GoToPreset(int presetNumber);

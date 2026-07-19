@@ -61,9 +61,29 @@ boolean zoom_stopped = true;
 
 int previousCamera = 0;
 
-const String DiscoveredCameraNames PROGMEM[20];
-const IPAddress DiscoveredCameraIPs PROGMEM[20];
-int NumDiscoveredCameras = 0;
+// Shared discovery result list (populated by VISCA and ONVIF discovery).
+DiscoveredCamera discoveredCameras[MAX_DISCOVERED];
+int numDiscoveredCameras = 0;
+
+void resetDiscovered() {
+  numDiscoveredCameras = 0;
+}
+
+// Append a camera, de-duplicated by ip+port (so re-probes and multi-response
+// cameras don't create duplicates). Returns true if a new entry was added.
+bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport, const char *name) {
+  for (int i = 0; i < numDiscoveredCameras; i++) {
+    if (discoveredCameras[i].ip == ip && discoveredCameras[i].port == port) return false;
+  }
+  if (numDiscoveredCameras >= MAX_DISCOVERED) return false;
+  DiscoveredCamera &c = discoveredCameras[numDiscoveredCameras++];
+  c.ip = ip;
+  c.port = port;
+  c.type = type;
+  c.transport = transport;
+  strlcpy(c.name, name, sizeof(c.name));
+  return true;
+}
 
 // PSK BUG Keep a UDP socket around for each camera so I'm not creating each one every message
 // SONY MANUAL:
@@ -72,16 +92,16 @@ int NumDiscoveredCameras = 0;
 // It may cause efficiency to be reduced substantially.
 
 void visca_send(String command, byte packet[], int size, int cameraNumber, boolean waitForAck = false, boolean waitForComplete = false, byte response[] = visca_response) {
-  WiFiUDP udp;
   String returnCode = "OK";
   String displayString = String(sequenceNumber) + String(" - ") + command + String(" - ");
   //byte response[256] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-  memset(response, 0, 256);
+  memset(response, 0, VISCA_RESPONSE_SIZE);
 
   // digitalWrite(PIN_TRANSMIT, HIGH);
 
-  // NUM_CAMERA+1 for hidden broadcast camera
-  if (cameraNumber < 0 || cameraNumber > NUM_CAMERAS + 1) {
+  // Valid indices are 0..NUM_CAMERAS (NUM_CAMERAS is the hidden broadcast camera);
+  // arrays are sized NUM_CAMERAS+1, so NUM_CAMERAS+1 would be out of bounds.
+  if (cameraNumber < 0 || cameraNumber > NUM_CAMERAS) {
     loge("Invalid cameraNumber: %d\n", cameraNumber);
     VISCA_ERROR("E99");
   }
@@ -136,16 +156,16 @@ void visca_send(String command, byte packet[], int size, int cameraNumber, boole
     successByte -= VISCA_HEADER_SIZE;
   }
 
-  if (NETWORK_SUCCESS != connect(cameraNumber)) {
+  if (NETWORK_SUCCESS != camConnect(cameraNumber)) {
     VISCA_ERROR("E97");
   }
 
-  if (NETWORK_SUCCESS != send(cameraNumber, &packet[startPos], sendSize)) {
+  if (NETWORK_SUCCESS != camSend(cameraNumber, &packet[startPos], sendSize)) {
     VISCA_ERROR("E96");
   }
 
   if (waitForAck) {
-    int len = recieve(cameraNumber, response);
+    int len = camRecv(cameraNumber, response, VISCA_RESPONSE_SIZE);
     if (NETWORK_ERROR == len) {
       VISCA_ERROR("E95");
     } else if (NETWORK_TIMEOUT == len) {
@@ -166,7 +186,7 @@ void visca_send(String command, byte packet[], int size, int cameraNumber, boole
   }
 
   if (waitForComplete) {
-    int len = recieve(cameraNumber, response);
+    int len = camRecv(cameraNumber, response, VISCA_RESPONSE_SIZE);
     if (NETWORK_ERROR == len) {
       VISCA_ERROR("E93");
 
@@ -292,7 +312,8 @@ void viscaSetup() {
     settings.cameraIP[NUM_CAMERAS][2] = 255;
     settings.cameraIP[NUM_CAMERAS][3] = 255;
     settings.cameraPort[NUM_CAMERAS] = VISCA_PORT;
-    settings.cameraProtocol[NUM_CAMERAS] = PROTOCOL_UDP;
+    settings.cameraType[NUM_CAMERAS] = CAM_VISCA;
+    settings.cameraTransport[NUM_CAMERAS] = CAM_UDP;
     settings.cameraHeaders[NUM_CAMERAS] = 1;
 
     for (int i = 0; i < NUM_CAMERAS; i++) {
@@ -325,61 +346,52 @@ int cameraStatus(int cameraNumber) {
   }
 }
 
-String discoveredCameraName(int i) {
-  return DiscoveredCameraNames[i];
+// Pull a "NAME:xxxx" value out of a VISCA discovery reply into out[cap].
+// Falls back to "VISCA Camera" when the reply carries no name.
+static void parseViscaName(const byte *resp, int len, char *out, size_t cap) {
+  strlcpy(out, "VISCA Camera", cap);
+  for (int i = 0; i + 5 < len; i++) {
+    if (memcmp(resp + i, "NAME:", 5) == 0) {
+      int s = i + 5, e = s;
+      while (e < len && resp[e] >= 0x20 && resp[e] != 0xFF) e++;
+      int n = e - s;
+      if (n > 0) { if (n > (int)cap - 1) n = cap - 1; memcpy(out, resp + s, n); out[n] = 0; }
+      return;
+    }
+  }
 }
 
-IPAddress discoveredCameraIP(int i) {
-  return DiscoveredCameraIPs[i];
-}
-
+// VISCA discovery: broadcast the network inquiry and collect replies. Each
+// reply's source ip:port identifies a camera. Appends to discoveredCameras[].
 int discoverCameras() {
-  // WiFiUDP.parsePacket() sets WiFiUDP.remoteIP() on each packet recieved
   byte response[256];
   int startPos = 0;
   int sendSize = sizeof(visca_net_inq_bytes);
 
-  // Maybe just use IP with last octlet as 255?
   memset(response, 0, sizeof(response));
   if (!settings.cameraHeaders[CAMERA_BROADCAST]) {
     startPos = VISCA_HEADER_SIZE;
     sendSize -= VISCA_HEADER_SIZE;
   }
 
-  logi("Discovering cameras");
+  logi("VISCA discovery: broadcasting network inquiry");
 
-  connect(CAMERA_BROADCAST);
-  send(CAMERA_BROADCAST, &visca_net_inq_bytes[startPos], sendSize);
-  int NumDiscoveredCameras = 0;
+  camConnect(CAMERA_BROADCAST);
+  camSend(CAMERA_BROADCAST, &visca_net_inq_bytes[startPos], sendSize);
+
+  int found = 0;
   int len = 0;
-  while (0< (len = recieve(CAMERA_BROADCAST, response))) {
-      // Reply Can I send this to a tcp port?
-  /*
-  02
-MAC:**-**-**-**-**-** *1
-FF
-MODEL:IPCARD *1
-FF
-SOFTVERSION:**.**.** *1
-FF
-IPADR:***.***.***.*** *1
-FF
-MASK:***.***.***.*** *1
-FF
-GATEWAY:***.***.***.*** *1
-FF
-NAME:xxxxxxxx *1
-FF
-WRITE:on *1
-FF
-03
-**/ 
-    IPAddress cam = udp.remoteIP();
-    //gethostbyaddr() doesn't exist in arduino / esp32
-    logi("Discovered camera at IP: %s len: %d Response: %s", cam.toString().c_str(), len, response);
-    printBytes( response, len );
-    NumDiscoveredCameras++;
+  while (0 < (len = camRecv(CAMERA_BROADCAST, response, sizeof(response)))) {
+    IPAddress ip = camRemoteIP(CAMERA_BROADCAST);
+    uint16_t port = camRemotePort(CAMERA_BROADCAST);
+    if (port == 0) port = VISCA_PORT;
+    char name[24];
+    parseViscaName(response, len, name, sizeof(name));
+    if (addDiscovered(ip, port, CAM_VISCA, CAM_UDP, name)) {
+      logi("VISCA camera: %s:%u \"%s\"", ip.toString().c_str(), port, name);
+      found++;
+    }
   }
-  logi("Found cameras: %d", NumDiscoveredCameras);
-  return NumDiscoveredCameras;
+  logi("VISCA discovery found %d camera(s)", found);
+  return found;
 }

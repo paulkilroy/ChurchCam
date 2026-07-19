@@ -5,6 +5,21 @@
 
 bool WiFiWorked = false;
 
+// Service startup (mDNS, ATEM connect, web server, websocket) must run on the
+// main loop, NOT the WiFi/Ethernet event task: those libraries aren't
+// thread-safe and the event task must never block (mDNS discovery alone takes
+// ~1-2s). The callback only records a request; the loop starts services exactly
+// once. The "started" latch also stops the old behaviour of re-begin()-ing every
+// server on each GOT_IP / AP-connect, which leaked listening sockets.
+static volatile bool servicesRequested = false;
+static bool servicesStarted = false;
+static const char* servicesReason = "startup";
+
+static void requestNetworkServices(const char* reason) {
+  servicesReason = reason;
+  servicesRequested = true;
+}
+
 // Maybe move to ATEMmin ???
 /**
  * Use mDNS to find the any ATEMs on the network
@@ -28,13 +43,38 @@ void discoverATEM(const char info[]) {
         Serial.print(": ");
         Serial.print(MDNS.hostname(i));
         Serial.print(" (");
-        Serial.print(MDNS.IP(i));
+        Serial.print(MDNS.address(i));
         Serial.print(":");
         Serial.print(MDNS.port(i));
         Serial.println(")");
       }
-      settings.switcherIP = MDNS.IP(0);
+      settings.switcherIP = MDNS.address(0);
     }
+  }
+}
+
+// In the Wokwi simulator, point the ATEM and the four cameras at the Node
+// simulators on the host, reached via the private gateway at
+// host.wokwi.internal. Mirrors simulator/server.js:
+//   cam1 VISCA-UDP:52381, cam2 VISCA-TCP:52382, cam3/4 ONVIF:8083/8084, ATEM 9910.
+static void configureSimulatorTargets(const char info[]) {
+  IPAddress host;
+  if (!WiFi.hostByName("host.wokwi.internal", host)) {
+    logi("%s SIM: could not resolve host.wokwi.internal", info);
+    return;
+  }
+  logi("%s SIM: targeting host sims at %s", info, host.toString().c_str());
+  settings.switcherIP = host;
+  const uint16_t ports[4]      = { 52381, 52382, 8083, 8084 };
+  const uint8_t  types[4]      = { CAM_VISCA, CAM_VISCA, CAM_ONVIF, CAM_ONVIF };
+  const uint8_t  transports[4] = { CAM_UDP,   CAM_TCP,   CAM_TCP,   CAM_TCP };
+  const uint8_t  headers[4]    = { 1, 0, 1, 1 };
+  for (int i = 0; i < 4; i++) {
+    settings.cameraIP[i]        = host;
+    settings.cameraPort[i]      = ports[i];
+    settings.cameraType[i]      = types[i];
+    settings.cameraTransport[i] = transports[i];
+    settings.cameraHeaders[i]   = headers[i];
   }
 }
 
@@ -42,6 +82,10 @@ void discoverATEM(const char info[]) {
  * Some things need to have the network up before we turn them on or they freak out, put those here
 */
 void networkSetup(const char info[]) {
+  // In the simulator, target the host's Node camera/ATEM sims before anything
+  // that reads switcherIP/cameraIP (discoverATEM, atemSwitcher.connect).
+  if (InSimulator) configureSimulatorTargets(info);
+
   // Set up mDNS hostname so people can go to hostname.local without the IP address
   if (!MDNS.begin(getHostname())) {
     logi("%s mDNS error [%s]", info, getHostname());
@@ -51,20 +95,14 @@ void networkSetup(const char info[]) {
 
   discoverATEM(info);
 
-  /* if( InSiimulator ) {
-    settings.switcherIP[0]=192;
-    settings.switcherIP[1]=168;
-    settings.switcherIP[2]=50;
-    settings.switcherIP[3]=68;
-  }
-  */
   if (settings.switcherIP[0] == 0) {
     logi("%s ATEM not configured, skipping begin/connect", info);
   } else {
     atemSwitcher.begin(settings.switcherIP);
     atemSwitcher.connect();
-    // To enable serial debug for the ATEM code
-    //atemSwitcher.serialOutput(0x81);
+    // To enable serial debug for the ATEM code (WARNING: blocking Serial at
+    // 115200 stalls runLoop enough to drop the ATEM keepalive -- leave off)
+    //atemSwitcher.serialOutput(0x80);
     logi("%s Connecting to ATEM Switcher IP: %s", info, settings.switcherIP.toString().c_str());
   }
 
@@ -72,6 +110,16 @@ void networkSetup(const char info[]) {
   webSetup();
   // TODO Move to Web.cpp
   webSocketServer.begin();
+}
+
+// Called every loop() iteration. Starts network services exactly once, in loop
+// context, after the event callback has signalled connectivity — keeping the
+// non-thread-safe begin()/connect()/mDNS work off the WiFi/Ethernet event task.
+void networkServicesLoop() {
+  if (!servicesRequested || servicesStarted) return;
+  servicesStarted = true;
+  logi("Starting network services (%s)", servicesReason);
+  networkSetup(servicesReason);
 }
 
 // Ideas to fix POE
@@ -100,7 +148,7 @@ void wifiEventCallback(WiFiEvent_t event) {
       logi("ETH_GOT_IP Hostname: %s IP: %s", ETH.getHostname(), ETH.localIP().toString().c_str());
       WiFi.setAutoReconnect(false);
       WiFi.mode(WIFI_OFF);
-      networkSetup("ETH_GOT_IP");
+      requestNetworkServices("ETH_GOT_IP");
       break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
       logi("%d ETH_DISCONNECTED", WiFi.getStatusBits());
@@ -151,7 +199,7 @@ void wifiEventCallback(WiFiEvent_t event) {
 
       logi("WIFI_STA_GOT_IP Hostname: %s IP: %s", WiFi.getHostname(), WiFi.localIP().toString().c_str());
       // Needed? WiFi.mode(WIFI_STA);  // Disable softAP if connection is successful
-      networkSetup("WIFI_STA_GOT_IP");
+      requestNetworkServices("WIFI_STA_GOT_IP");
       WiFiWorked = true;
       break;
     case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:
@@ -165,7 +213,7 @@ void wifiEventCallback(WiFiEvent_t event) {
       break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
       logi("%d WIFI_AP_STACONNECTED", WiFi.getStatusBits());
-      networkSetup("AP_STACONNECTED");
+      requestNetworkServices("AP_STACONNECTED");
       break;
     case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
       logi("%d WIFI_AP_STADISCONNECTED", WiFi.getStatusBits());
@@ -185,7 +233,9 @@ void networkSetup() {
 
   if( !InSimulator ) {
     logi("Starting ETH");
-    ETH.begin(ETH_PHY_ADDR, ETH_PHY_POWER);
+    // Arduino core 3.x needs the full PHY description. Olimex ESP32-PoE:
+    // LAN8720, PHY addr 0, MDC=23, MDIO=18, power=GPIO12, clock=GPIO17 output.
+    ETH.begin(ETH_PHY_LAN8720, 0, 23, 18, ETH_PHY_POWER, ETH_CLK_MODE);
     ETH.setHostname(AP_SSID);
     delay(100);
 
@@ -230,50 +280,34 @@ String getPSK() {
   return settings.psk;
 }
 
+// "Up" means the interface has a routable IP, not merely that the PHY link is
+// connected -- you can't send a packet without an address. This keeps ethUp()/
+// wifiUp() consistent with the Web status ladder and stops activeNet() from ever
+// selecting a link that's up but still mid-DHCP (localIP() == 0.0.0.0).
 bool ethUp() {
-  return WiFiGenericClass::getStatusBits() & ETH_CONNECTED_BIT;
+  return ETH.hasIP();
 }
 
 bool wifiUp() {
-  return WiFiGenericClass::getStatusBits() & STA_CONNECTED_BIT;
+  return WiFi.STA.hasIP();
 }
 
 bool hotspotUp() {
-  return WiFiGenericClass::getStatusBits() & AP_STARTED_BIT;
+  return WiFi.AP.started();
 }
 
 bool networkUp() {
   return ethUp() || wifiUp() || hotspotUp();
 }
 
-const char* getHostname() {
-  if (ethUp()) {
-    return ETH.getHostname();
-  } else {
-    return WiFi.getHostname();
-  }
+// The active interface: prefer Ethernet, fall back to WiFi station. Both are
+// NetworkInterfaces in core 3.x, so every accessor below is one line and the
+// ETH-vs-WiFi choice lives in exactly one place.
+static NetworkInterface& activeNet() {
+  return ethUp() ? (NetworkInterface&)ETH : (NetworkInterface&)WiFi.STA;
 }
 
-IPAddress localIP() {
-  if (ethUp()) {
-    return ETH.localIP();
-  } else {
-    return WiFi.localIP();
-  }
-}
-
-IPAddress subnetMask() {
-  if (ethUp()) {
-    return ETH.subnetMask();
-  } else {
-    return WiFi.subnetMask();
-  }
-}
-
-IPAddress gatewayIP() {
-  if (ethUp()) {
-    return ETH.gatewayIP();
-  } else {
-    return WiFi.gatewayIP();
-  }
-}
+const char* getHostname() { return activeNet().getHostname(); }
+IPAddress   localIP()     { return activeNet().localIP(); }
+IPAddress   subnetMask()  { return activeNet().subnetMask(); }
+IPAddress   gatewayIP()   { return activeNet().gatewayIP(); }

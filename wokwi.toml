@@ -1,3 +1,8 @@
+# Wokwi ESP32 simulator config. Run via the Wokwi VS Code extension (or wokwi-cli
+# with a WOKWI_CLI_TOKEN). Pairs with diagram.json (the virtual wiring).
+# The firmware detects the simulator by Wokwi's fixed MAC (ChurchCam.cpp) and
+# takes the InSimulator path: no Ethernet, joins "Wokwi-GUEST" WiFi, uses the
+# "Simulator" pinout (ChurchCam.cpp Pinouts[REV_SIM]).
 [wokwi]
 version = 1
 elf = ".pio/build/esp32-poe/firmware.elf"
@@ -5,12 +10,23 @@ firmware = ".pio/build/esp32-poe/firmware.bin"
 gdbServerPort=3333
 rfc2217ServerPort = 4000
 
+# Use the LOCAL private gateway (run: simulator/wokwigw) instead of Wokwi's cloud
+# gateway, so the simulated device can reach the host's Node camera/ATEM sims
+# (incl. UDP). Requires a Wokwi Club license. Reach the host via host.wokwi.internal.
+[net]
+gateway = "ws://localhost:9011"
 
-# Forward http://localhost:8180 to port 80 on the simulated ESP32:
+# net.forward exposes a port on the simulated device TO your host (host -> guest).
+# Use it to open the device's web config / websocket from your browser.
+# NOTE: this only forwards INBOUND. The simulated device runs in Wokwi's cloud and
+# CANNOT reach host-local services (the Node camera/ATEM sims) -- see simulator/README.
+
+# http://localhost:8180  ->  device web config on port 80
 [[net.forward]]
 from = "localhost:8180"
 to = "target:80"
 
+# ws://localhost:3000  ->  device joystick-telemetry websocket on port 3000
 [[net.forward]]
 from = "localhost:3000"
 to = "target:3000"

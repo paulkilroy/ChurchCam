@@ -23,16 +23,16 @@ String processor(const String& var) {
     char network[150];
 
     String status = "";
-    status = WiFi.getStatusBits() & ETH_STARTED_BIT ? "down" : "off";
-    if ( WiFi.getStatusBits() & ETH_HAS_IP_BIT ) status = "up";
+    status = ETH.started() ? "down" : "off";
+    if ( ETH.hasIP() ) status = "up";
     sprintf(network, nfmt, "Ethernet", status.c_str(),
       status == "up" ? ETH.localIP().toString().c_str() : "-",
       "-",
       "");
     serverVars += network;
 
-    status = WiFi.getStatusBits() & STA_STARTED_BIT ? "down" : "off";
-    if ( WiFi.getStatusBits() & STA_HAS_IP_BIT ) status = "up";
+    status = WiFi.STA.started() ? "down" : "off";
+    if ( WiFi.STA.hasIP() ) status = "up";
     sprintf(network, nfmt, "WiFi", status.c_str(),
       status == "up" ? WiFi.localIP().toString().c_str() : "-",
       getSSID().c_str(),
@@ -40,7 +40,7 @@ String processor(const String& var) {
     serverVars += network;
     //Serial.printf("WiFi.getTxPower() %d\n", WiFi.getTxPower());
 
-    status = WiFi.getStatusBits() & AP_STARTED_BIT ? "up" : "off";
+    status = WiFi.AP.started() ? "up" : "off";
     sprintf(network, nfmt, "Hotspot", status.c_str(),
       status == "up" ? WiFi.softAPIP().toString().c_str() : "-",
       AP_SSID,
@@ -61,8 +61,8 @@ String processor(const String& var) {
     serverVars += input;
     return serverVars;
   } else if ( var == "ATEMCameras" ) {
-    //       { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "protocol": "1", "headers": "0" },
-    const char cfmt[] = "{ \"id\": \"%d\", \"status\": \"%s\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%d\", \"protocol\": \"%d\", \"headers\": \"%d\" },\n";
+    //       { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "1", "headers": "0" },
+    const char cfmt[] = "{ \"id\": \"%d\", \"status\": \"%s\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%d\", \"type\": \"%d\", \"transport\": \"%d\", \"headers\": \"%d\" },\n";
     int cameraNumber = 0;
     for ( uint16_t i = 0; i < NUM_CAMERAS; i++ ) {
       // If no switcher than show all potential inputs...
@@ -92,7 +92,8 @@ String processor(const String& var) {
         camName.c_str(),
         settings.cameraIP[cameraNumber].toString().c_str(),
         settings.cameraPort[cameraNumber],
-        settings.cameraProtocol[cameraNumber],
+        settings.cameraType[cameraNumber],
+        settings.cameraTransport[cameraNumber],
         settings.cameraHeaders[cameraNumber]);
       cameraNumber++;
       serverVars += input;
@@ -171,29 +172,27 @@ void handleRestartAndWait() {
 
 void handleDiscoverCameras() {
   logi("web request for: %s\n", srvr.uri().c_str());
-  //       { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "protocol": "0", "headers": "1" },
-  String inputs = "["; //"DiscoveredCameras = [";
-  const char fmt[] = "{ \"id\": \"%d\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%u\", \"protocol\": \"%d\", \"headers\": \"%d\" }\n";
-  int n = discoverCameras();
-  if ( n == 0 ) {
-    logi("No camera services found...");
-  } else {
-    logi("%d Camera service(s) found", n);
-    for ( int i = 0; i < n; ++i ) {
-      if ( i > 0 ) inputs += ',';
-      char input[150];
-      sprintf(input, fmt, i,
-        discoveredCameraName(i).c_str(),
-        discoveredCameraIP(i).toString().c_str(),
-        VISCA_PORT,
-        PROTOCOL_UDP,
-        1);
-      inputs += input;
-    }
-  }
+  //       { "name": "HD Camera", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "0", "headers": "1" },
+  const char fmt[] = "{ \"id\": \"%d\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%u\", \"type\": \"%d\", \"transport\": \"%d\", \"headers\": \"%d\" }";
 
+  // Run both discovery mechanisms; each appends into discoveredCameras[],
+  // de-duplicated by ip:port. (VISCA-TCP is not discoverable and stays manual.)
+  resetDiscovered();
+  discoverCameras();        // VISCA-UDP broadcast probe
+  discoverOnvifCameras();   // ONVIF WS-Discovery
+
+  String inputs = "[";
+  for ( int i = 0; i < numDiscoveredCameras; ++i ) {
+    DiscoveredCamera &c = discoveredCameras[i];
+    if ( i > 0 ) inputs += ',';
+    // VISCA-TCP is raw (no framing); everything else is framed (matches handleSave()).
+    int headers = ( c.type == CAM_VISCA && c.transport == CAM_TCP ) ? 0 : 1;
+    char input[170];
+    sprintf(input, fmt, i, c.name, c.ip.toString().c_str(), c.port, c.type, c.transport, headers);
+    inputs += input;
+  }
   inputs += "]";
-  logi("DiscoveredCamers = %s", inputs.c_str());
+  logi("Discovered %d camera(s): %s", numDiscoveredCameras, inputs.c_str());
   srvr.send(200, "application/json", inputs);
 }
 
@@ -212,9 +211,9 @@ void handleSave() {
     // Serial.printf("name: %s - %s\n", var.c_str(), val.c_str());
 
     if ( var == "networkName" ) {
-      strcpy(settings.ssid, val.c_str());
+      strlcpy(settings.ssid, val.c_str(), sizeof(settings.ssid));
     } else if ( var == "networkPassword" ) {
-      strcpy(settings.psk, val.c_str());
+      strlcpy(settings.psk, val.c_str(), sizeof(settings.psk));
     } else if ( var == "staticIP" ) {
       settings.staticIP = ( val == "true" );
     } else if ( var == "staticIPAddr" ) {
@@ -228,18 +227,12 @@ void handleSave() {
     } else if ( var.startsWith("camConfigIP") ) {
       int camNum = getCamNum(var, "camConfigIP");
       settings.cameraIP[camNum].fromString(val);
-    } else if ( var.startsWith("camConfigProtocol") ) {
-      int camNum = getCamNum(var, "camConfigProtocol");
-      settings.cameraProtocol[camNum] = val.toInt();
-      /*
-      <option value="0">VISCA UDP</option>
-\      <option value="1">VISCA TCP</option>
-      */
-      if ( val.toInt() == 1 ) {
-        settings.cameraHeaders[camNum] = 0;
-      } else {
-        settings.cameraHeaders[camNum] = 1;
-      }
+    } else if ( var.startsWith("camConfigType") ) {
+      int camNum = getCamNum(var, "camConfigType");
+      settings.cameraType[camNum] = val.toInt();       // CAM_VISCA | CAM_ONVIF
+    } else if ( var.startsWith("camConfigTransport") ) {
+      int camNum = getCamNum(var, "camConfigTransport");
+      settings.cameraTransport[camNum] = val.toInt();  // CAM_UDP | CAM_TCP
     } else if ( var.startsWith("camConfigPort") ) {
       int camNum = getCamNum(var, "camConfigPort");
       settings.cameraPort[camNum] = val.toInt();
@@ -248,7 +241,16 @@ void handleSave() {
     }
   }
 
+  // VISCA-IP header framing: VISCA over UDP is framed, VISCA over TCP is raw.
+  // (ONVIF ignores it.) Derived, not separately configured.
+  for ( int c = 0; c <= NUM_CAMERAS; c++ ) {
+    settings.cameraHeaders[c] =
+      ( settings.cameraType[c] == CAM_VISCA && settings.cameraTransport[c] == CAM_TCP ) ? 0 : 1;
+  }
+
   if ( !InSimulator ) {
+    settings.magic = SETTINGS_MAGIC;
+    settings.version = SETTINGS_VERSION;
     EEPROM.put(0, settings);
     EEPROM.commit();
   }

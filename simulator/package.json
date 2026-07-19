@@ -1,0 +1,9 @@
+{
+  "name": "churchcam-simulator",
+  "version": "1.0.0",
+  "description": "Virtual PTZ cameras (VISCA + ONVIF) and a virtual ATEM Mini for testing the ChurchCam controller.",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}
