@@ -46,8 +46,6 @@
   </style>
   <script defer src="bootstrap.bundle.min.js"></script>
   <script defer src="validate-forms.js"></script>
-  <!-- Needed for Firmware upload -- assuming you've got interenet to fetch this -->
-  <script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script>
   <script>
     LogCallback = null;
     ptzSocket = null;
@@ -256,7 +254,6 @@
       dc.parentNode.replaceChild(div, dc);
     }
 
-    // TODO Convert to pure JS
     async function discoverCameras(btn) {
       btn.disabled = true;
       btn.innerHTML =
@@ -266,8 +263,7 @@
         DiscoveredCameras = await response.json();
         console.log(DiscoveredCameras);
       }
-      //document.getElementById('discoverModal').
-      $('#discoverModal').modal('show');
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('discoverModal')).show();
       drawDiscoveredCameras();
       btn.disabled = false;
       btn.innerHTML = "Discover Cameras";
@@ -645,7 +641,7 @@
               </ul>
               <span class="border border-primary py-3">
                 <div class="input-group mb-3">
-                  <span id="atemConfigName" class="input-group-text" id="basic-addon1">ATEM Mini Pro</span>
+                  <span id="atemConfigName" class="input-group-text">ATEM Mini Pro</span>
                   <input name="atemConfigIP" type="text" class="form-control" id="atemConfigIP" placeholder="0.0.0.0" value="%ATEM_IP_ADDR%"
                     minlength="7" maxlength="15" size="15"
                     pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
@@ -684,7 +680,7 @@
                         onclick="toggleCam(this)" checked>
                     </div>
                   -->
-                    <div id="camConfigName" class="input-group-text flex-grow-1 col-md-3 col-6" id="basic-addon1">CAM1
+                    <div id="camConfigName" class="input-group-text flex-grow-1 col-md-3 col-6">CAM1
                       [ATEM In1]</div>
                     <div class="col-md-2 col-6 px-0">
                       <select name="camConfigType" class="form-select" id="camConfigType" onchange="onCamTypeChange(this)">
@@ -835,35 +831,31 @@
       document.getElementById("smsgBox").style.display = 'block';
     }
 
-    /* TODO Change to JavaScript fetch API? and get rid of jquery */
-    $('#upload_form').submit(function (e) {
+    /* Native XHR firmware upload with a progress bar. fetch() has no
+       upload-progress event, so XMLHttpRequest is the right tool here. */
+    document.getElementById('upload_form').addEventListener('submit', function (e) {
       e.preventDefault();
-      var form = $('#upload_form')[0];
-      var data = new FormData(form);
-      $.ajax({
-        url: '/update',
-        type: 'POST',
-        data: data,
-        contentType: false,
-        processData: false,
-        xhr: function () {
-          var xhr = new window.XMLHttpRequest();
-          xhr.upload.addEventListener('progress', function (evt) {
-            if (evt.lengthComputable) {
-              var per = evt.loaded / evt.total;
-              per = Math.round(per * 100);
-              $('#prg').width(per + '%');
-            }
-          }, false);
-          return xhr;
-        },
-        success: function (d, s) {
-          console.log('success!')
+      var data = new FormData(e.target);
+      var xhr = new XMLHttpRequest();
+      xhr.upload.addEventListener('progress', function (evt) {
+        if (evt.lengthComputable) {
+          var per = Math.round(evt.loaded / evt.total * 100);
+          document.getElementById('prg').style.width = per + '%';
+        }
+      }, false);
+      xhr.addEventListener('load', function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          console.log('success!');
           window.location.href = '/restart';
-        },
-        error: function (a, b, c) {
+        } else {
+          console.error('firmware upload failed: HTTP ' + xhr.status);
         }
       });
+      xhr.addEventListener('error', function () {
+        console.error('firmware upload error');
+      });
+      xhr.open('POST', '/update');
+      xhr.send(data);
     });
   </script>
 </body>
