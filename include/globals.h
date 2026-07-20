@@ -54,7 +54,7 @@
 // EEPROM settings header. Bump SETTINGS_VERSION on any Settings layout change so
 // old/blank EEPROM is detected and reset to defaults instead of read as garbage.
 #define SETTINGS_MAGIC   0x43436D31u  // "CCm1"
-#define SETTINGS_VERSION 1
+#define SETTINGS_VERSION 2            // v2: NUM_CAMERAS 20 -> 8 (Settings layout shrank)
 
 #define BOARD_NAME Pinouts[HWRev].name       // Board
 #define PIN_TILT Pinouts[HWRev].tilt         // Yellow
@@ -110,8 +110,10 @@ struct Settings {
   bool hideJoystickPosition;
   bool hideJoystickPosition2;
 
-// Cameras + 1 below for hidden broadcast camera
-#define NUM_CAMERAS 20
+// Cameras + 1 below for hidden broadcast camera. 8 is the design ceiling (the
+// largest ATEM in this class has 8 inputs, and the on-device camera strip lays
+// out exactly 8 tiles); bump SETTINGS_VERSION if this ever changes.
+#define NUM_CAMERAS 8
 #define CAMERA_BROADCAST NUM_CAMERAS
   IPAddress cameraIP[NUM_CAMERAS + 1];
   uint8_t cameraType[NUM_CAMERAS + 1];       // CAM_VISCA | CAM_ONVIF

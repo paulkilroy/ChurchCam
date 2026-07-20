@@ -392,7 +392,7 @@ static void drawCameraStrip(int active) {
   int pgm = atemSwitcher.isConnected() ? atemSwitcher.getProgramInputVideoSource(0) : -1;
   int pvw = atemSwitcher.isConnected() ? atemSwitcher.getPreviewInputVideoSource(0) : -1;
   txt(FONT_TINY, COL_DIM, 6, 160, "INPUTS");
-  int x0 = 6, y = 164, W = 308, h = 36, n = 8, gap = 4;
+  int x0 = 6, y = 164, W = 308, h = 36, n = NUM_CAMERAS, gap = 4;   // strip is sized for 8 tiles
   int tw = (W - (n - 1) * gap) / n;
   for ( int i = 0; i < n; i++ ) {
     int input = i + 1, tx = x0 + i * (tw + gap);
