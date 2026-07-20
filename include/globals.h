@@ -122,7 +122,7 @@ struct Settings {
 
 struct LogItem {
   int type;
-  int time;
+  uint32_t time;
   char buf[256];
 };
 
@@ -157,6 +157,7 @@ extern bool WiFiWorked;                      // WiFi has connected at least once
 void notePreset(int num, bool isSet);        // latch a preset recall/save for the display's button pill
 extern volatile bool g_otaActive;            // firmware update in progress (display shows the OTA screen)
 extern volatile uint32_t g_otaBytes;         // bytes written so far during OTA
+extern volatile uint32_t g_otaLastChunk;     // millis() of the last received OTA chunk (stuck detection)
 struct LogItem getLogItem(uint8_t i);
 void cameraControlLoop();
 void cameraControlSetup();

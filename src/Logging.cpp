@@ -87,15 +87,21 @@ static void logAppend(int type, bool toSerial, const char* fmt, va_list args) {
   char buf[sizeof(LogItems[0].buf)];
   vsnprintf(buf, sizeof(buf), fmt, args);
 
+  uint32_t now = millis();
+
+  // Claim the slot AND populate it under the same lock. The formatting above is
+  // done on the caller's stack (outside the lock) so this section stays short,
+  // but the slot's fields must be written inside it -- otherwise a concurrent
+  // writer that claims the next slot, or a reader in getLogItem(), can observe a
+  // half-written entry (new time with a stale buf, etc.).
   portENTER_CRITICAL(&logMux);
   ptr = (ptr + 1) % LOG_SIZE;
   if ( count < LOG_SIZE - 1 ) count++;
   uint8_t slot = ptr;
-  portEXIT_CRITICAL(&logMux);
-
   strlcpy(LogItems[slot].buf, buf, sizeof(LogItems[slot].buf));
   LogItems[slot].type = type;
-  LogItems[slot].time = millis();
+  LogItems[slot].time = now;
+  portEXIT_CRITICAL(&logMux);
 
   if ( toSerial ) Serial.print(buf);
 }

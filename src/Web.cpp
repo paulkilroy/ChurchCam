@@ -38,6 +38,7 @@ String RestartMsg = "";
 bool Restart = false;
 volatile bool g_otaActive = false;      // set while an OTA upload is streaming (display OTA screen)
 volatile uint32_t g_otaBytes = 0;
+volatile uint32_t g_otaLastChunk = 0;   // millis() of the last chunk, for stuck-upload detection
 
 String processor(const String& var) {
   String serverVars = "";
@@ -277,16 +278,23 @@ static esp_err_t handleNotFound(PsychicRequest* request, PsychicResponse* respon
 // OTA firmware upload: chunked write to Update, then the client polls /restart.
 static esp_err_t otaUploadChunk(PsychicRequest* request, const String& filename,
                                 uint64_t index, uint8_t* data, size_t len, bool last) {
+  g_otaLastChunk = millis();
   if ( index == 0 ) {
     Serial.printf("UPDATE: %s\n", filename.c_str());
-    g_otaActive = true;   // the display takes over with the "do not power off" screen
-    if ( !Update.begin(UPDATE_SIZE_UNKNOWN) ) Update.printError(Serial);
+    if ( !Update.begin(UPDATE_SIZE_UNKNOWN) ) {
+      Update.printError(Serial);
+      g_otaActive = false;      // never took over the display; release it
+      return ESP_FAIL;          // don't stream the rest of the image into a failed session
+    }
+    g_otaActive = true;         // the display takes over with the "do not power off" screen
   }
+  if ( !g_otaActive ) return ESP_FAIL;   // begin() failed on chunk 0; refuse the remaining chunks
   if ( len && Update.write(data, len) != len ) Update.printError(Serial);
   g_otaBytes = index + len;
   if ( last ) {
     if ( Update.end(true) ) Serial.printf("Update Success: %llu\n", index + len);
     else Update.printError(Serial);
+    g_otaActive = false;        // upload finished; /restart reboots, but release the display now
   }
   return ESP_OK;
 }
@@ -341,5 +349,15 @@ void webSetup() {
 }
 
 void webLoop() {
-  // PsychicHttp serves requests in its own FreeRTOS task; nothing to poll here.
+  // PsychicHttp serves requests in its own FreeRTOS task, so there is normally
+  // nothing to poll here. The one exception: if an OTA upload dies mid-stream
+  // (dropped client, network glitch), the upload callback stops firing and
+  // g_otaActive would otherwise stay latched forever, wedging the display on the
+  // "do not power off" screen. Detect the stall here and abort the update.
+  #define OTA_STALL_MS 15000
+  if ( g_otaActive && ( millis() - g_otaLastChunk > OTA_STALL_MS ) ) {
+    logw("OTA upload stalled (%lu ms with no data); aborting", millis() - g_otaLastChunk);
+    Update.abort();
+    g_otaActive = false;
+  }
 }

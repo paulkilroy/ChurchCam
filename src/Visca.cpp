@@ -110,8 +110,11 @@ void visca_send(String command, byte packet[], int size, int cameraNumber, boole
     VISCA_ERROR("E98");
   }
 
-  // Don't keep sending the same packet -- compare to previous
-  if (previousCamera == cameraNumber && 0 == memcmp(visca_previous, packet, size)) {
+  // Don't keep re-sending the same drive command. But NEVER suppress an inquiry
+  // (waitForAck/waitForComplete) -- it needs a fresh reply, and suppressing it
+  // would return the zeroed response above and read as CAMERA_DOWN.
+  if (!waitForAck && !waitForComplete &&
+      previousCamera == cameraNumber && 0 == memcmp(visca_previous, packet, size)) {
 #ifdef VISCA_DEBUG
     logd("Duplicate packet on same camera: ignoring");
     logd("previousCamera: %d cameraNumber: %d\n", previousCamera + 1, cameraNumber + 1);

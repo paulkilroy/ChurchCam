@@ -25,8 +25,25 @@ unsigned long endPress = 0;
 
 bool wasButton1Pressed = false;
 bool wasButton2Pressed = false;
+// OVERRIDE is latched at button-press time, not read at release: the preview
+// source (which overridePreview() reflects) can change between press and release,
+// and we want the intent the operator had when they started the press.
+bool button1Override = false;
+bool button2Override = false;
 
 #define LONG_PRESS_TIME 500
+
+// --- Cached status --------------------------------------------------------
+// cameraStatus() does blocking socket I/O, so it must run ONLY in the main-loop
+// task -- the same task that drives the active camera. The async PsychicHttp
+// handler must never call it directly, or two tasks race on the same camera
+// socket (which flapped the active camera up/down). Instead the main loop polls
+// one camera per tick into this cache and the web UI reads the cache. Seeded to
+// CAMERA_NA in cameraControlSetup().
+static int      camStatusCache[NUM_CAMERAS];
+static int      camPollIdx = 0;
+static uint32_t lastStatusPollAt = 0;
+#define STATUS_POLL_INTERVAL_MS 300
 
 void cameraControlSetup() {
   analogReadResolution(ANALOG_RESOLUTION);  // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
@@ -42,6 +59,10 @@ void cameraControlSetup() {
   pinMode(PIN_RECALL_1, INPUT_PULLUP);
   pinMode(PIN_RECALL_2, INPUT_PULLUP);
   pinMode(PIN_OVERRIDE, INPUT_PULLUP);
+
+  // The camStatusCache array initializer only sets element [0]; seed the rest to
+  // CAMERA_NA so the web UI never reads a bogus status for an un-polled camera.
+  for (int i = 0; i < NUM_CAMERAS; i++) camStatusCache[i] = CAMERA_NA;
 
   setupDefaults();
   viscaSetup();
@@ -109,17 +130,6 @@ int cameraStatus(int cameraNumber) {
                                : onvifStatus(cameraNumber);
 }
 
-// --- Cached status --------------------------------------------------------
-// cameraStatus() does blocking socket I/O, so it must run ONLY in the main-loop
-// task -- the same task that drives the active camera. The async PsychicHttp
-// handler must never call it directly, or two tasks race on the same camera
-// socket (which flapped the active camera up/down). Instead the main loop polls
-// one camera per tick into this cache and the web UI reads the cache.
-static int      camStatusCache[NUM_CAMERAS] = { CAMERA_NA };
-static int      camPollIdx = 0;
-static uint32_t lastStatusPollAt = 0;
-#define STATUS_POLL_INTERVAL_MS 300
-
 void pollCameraStatus() {
   uint32_t now = millis();
   if (now - lastStatusPollAt < STATUS_POLL_INTERVAL_MS) return;
@@ -148,20 +158,14 @@ int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, l
 }
 
 void buttonLoop() {
-  if ( digitalRead(PIN_RECALL_1) == LOW ) {
-    drawButton1();
-  }
-  if ( digitalRead(PIN_RECALL_2) == LOW) {
-    drawButton2();
-  }
-
   if ( digitalRead(PIN_RECALL_1) == LOW && digitalRead(PIN_RECALL_2) == LOW ) {
     // autoCalibrate();
   } else if ( (digitalRead(PIN_RECALL_1) == LOW) && (wasButton1Pressed == false) ) {
     wasButton1Pressed = true;
+    button1Override = overridePreview();    // latch intent at press
   } else if ( (digitalRead(PIN_RECALL_1) == HIGH) && (wasButton1Pressed == true)){
     wasButton1Pressed = false;
-    if ( overridePreview() ) {              // holding OVERRIDE = save this position
+    if ( button1Override ) {                // was holding OVERRIDE = save this position
       logi("OVERRIDE + button 1: saving preset 1");
       if (isVisca(getActiveCamera())) visca_set_memory(1);
       else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) Onvif_SetPreset(1);
@@ -174,9 +178,10 @@ void buttonLoop() {
     }
   } else if ( (digitalRead(PIN_RECALL_2) == LOW) && (wasButton2Pressed == false)) {
     wasButton2Pressed = true;
+    button2Override = overridePreview();    // latch intent at press
   } else if ( (digitalRead(PIN_RECALL_2) == HIGH) && (wasButton2Pressed == true)) {
     wasButton2Pressed = false;
-    if ( overridePreview() ) {              // holding OVERRIDE = save this position
+    if ( button2Override ) {                // was holding OVERRIDE = save this position
       logi("OVERRIDE + button 2: saving preset 2");
       if (isVisca(getActiveCamera())) visca_set_memory(2);
       else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) Onvif_SetPreset(2);
@@ -195,10 +200,6 @@ void buttonLoop() {
 }
 
 void cameraControlLoop() {
-  // Refresh the camera-status cache from this (main-loop) task, so the async web
-  // handler never touches a camera socket concurrently with camera driving.
-  pollCameraStatus();
-
   // TODO Move these to globals panPosition, etc
   int pan = analogRead(PIN_PAN);
   int tilt = analogRead(PIN_TILT);
@@ -222,10 +223,19 @@ void cameraControlLoop() {
   int tiltSpeed = -1*mapOffset(tilt, 0, AnalogMax/2, AnalogMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
   int zoomSpeed = mapOffset(zoom, 0, AnalogMax/2, AnalogMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
 
+  bool idle = ( panSpeed == 0 && tiltSpeed == 0 && zoomSpeed == 0 );
+
+  // Refresh the camera-status cache from this (main-loop) task, so the async web
+  // handler never touches a camera socket concurrently with camera driving.
+  // cameraStatus() does blocking socket I/O (up to ~800ms for a down VISCA-UDP
+  // camera), so only poll while idle -- never mid-drive, where it would stall
+  // the joystick.
+  if ( idle ) pollCameraStatus();
+
   // the last part of this if statement inserts a bit of delay if needed before sending the next command
   // only once MAX_SEND ms -- 100ms max UNLESS YOU ARE TRYING TO STOP THE CAMMERA -- then do that ASAP
   unsigned long currentSendTime = millis();
-  if ( ( panSpeed == 0 && tiltSpeed == 0 && zoomSpeed == 0 ) || ( currentSendTime > LastSendTime + MAX_SEND ) ) {
+  if ( idle || ( currentSendTime - LastSendTime > MAX_SEND ) ) {
     // TODO Separate out panTilt and zoom, then put repeate check by message type in 
     // the visca send function
     if (isVisca(getActiveCamera())) {

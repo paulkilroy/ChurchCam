@@ -237,9 +237,10 @@ uint16_t camRemotePort( int cameraNumber ) {
   return cameras[cameraNumber].lastFromPort;
 }
 
-// Read one message into packet[], never more than cap bytes. Returns
-// NETWORK_SUCCESS / NETWORK_TIMEOUT / NETWORK_ERROR (not the byte count) to
-// match the existing callers. The recv is bounded by SO_RCVTIMEO.
+// Read one message into packet[], never more than cap bytes. Returns the byte
+// count on success (>0), NETWORK_TIMEOUT (-1) on timeout, or NETWORK_ERROR (0)
+// on error/close. Callers that only compare against ERROR/TIMEOUT are unaffected;
+// discovery needs the length to parse the reply. Bounded by SO_RCVTIMEO.
 int camRecv( int cameraNumber, byte packet[], size_t cap ) {
   CameraLink &c = cameras[cameraNumber];
   if ( c.fd < 0 ) return NETWORK_ERROR;
@@ -269,5 +270,5 @@ int camRecv( int cameraNumber, byte packet[], size_t cap ) {
 #ifdef NETWORK_DEBUG
   logd( "Recv() %d [%s] == ", len, stringBytes( packet, len ).c_str() );
 #endif
-  return NETWORK_SUCCESS;
+  return len;   // byte count on success (>0); NETWORK_ERROR/TIMEOUT are 0/-1
 }

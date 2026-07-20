@@ -70,7 +70,7 @@ const char zoomFormat[] =
 "<ContinuousMove xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
 "<ProfileToken>Profile_1</ProfileToken>\r\n"
 "<Velocity>\r\n"
-"<Zoom x=\"%1.2f\"xmlns=\"http://www.onvif.org/ver10/schema\">\r\n"
+"<Zoom x=\"%1.2f\" xmlns=\"http://www.onvif.org/ver10/schema\">\r\n"
 "</Zoom>\r\n"
 "</Velocity>\r\n"
 "</ContinuousMove>\r\n"
@@ -213,7 +213,9 @@ void onvif_send( int cameraNumber ) {
     }
     //logi("Message sent: %s", messageBuf);
 
-    if (NETWORK_SUCCESS != camRecv(cameraNumber, (byte*)messageBuf, sizeof(messageBuf))) {
+    // camRecv() returns the byte count on success (>0), so treat any non-positive
+    // result as a failure rather than comparing against NETWORK_SUCCESS.
+    if (camRecv(cameraNumber, (byte*)messageBuf, sizeof(messageBuf)) <= 0) {
         logi("Unable to get response");
     } else {
         //logi("Message Recieved: %s", messageBuf);
@@ -262,7 +264,8 @@ void Onvif_ZoomDrive(int zoomSpeed) {
 
 void Onvif_PanTiltDrive(int panSpeed, int tiltSpeed) {
     int cam = getActiveCamera();
-    sprintf(soapBuf, velFormat, panSpeed, tiltSpeed);
+    // velFormat uses %1.3f -- pass normalized doubles, not ints (varargs UB).
+    sprintf(soapBuf, velFormat, panSpeed / 15.0, tiltSpeed / 15.0);
     sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
     logi("Sending pan tilt message x:%d y:%d", panSpeed, tiltSpeed);
     onvif_send(cam);
@@ -301,9 +304,11 @@ void Onvif_PtzDrive( int panSpeed, int tiltSpeed, int zoomSpeed ) {
         onvif_send(cam);
     }
     //logi("cp:%d pp:%d ct:%d pt:%d", panSpeed, prevPan, tiltSpeed, prevTilt);
-    if (((panSpeed == 0) && (tiltSpeed == 0)) && ((prevPan != 0) || (prevTilt != 0))) { 
-        //Serial.println("Not sending any message");
-        sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(stopFormat), stopFormat);
+    if (((panSpeed == 0) && (tiltSpeed == 0)) && ((prevPan != 0) || (prevTilt != 0))) {
+        // Build the SOAP body first -- previously this sent the raw stopFormat
+        // template with unfilled %s placeholders, so the camera never stopped.
+        sprintf(soapBuf, stopFormat, "false", "true");   // stop PanTilt, leave Zoom
+        sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
         logi("Stopping pan tilt");
         onvif_send(cam);
     } else {

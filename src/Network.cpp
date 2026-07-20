@@ -255,12 +255,12 @@ void networkSetup() {
 
   // Static IP Setup
   if (settings.staticIP && settings.staticIPAddr[0] != 255) {
-    logi("Configuring static IP: %s", settings.staticIPAddr.toString());
+    logi("Configuring static IP: %s", settings.staticIPAddr.toString().c_str());
     if( getSSID() == "" ) {
-      WiFi.config(settings.staticIPAddr, settings.staticGateway, settings.staticSubnetMask);
-    } else {
-      // TODO Need to test this code
+      // No WiFi SSID configured -> we are on Ethernet (see "prefer Ethernet" below)
       ETH.config(settings.staticIPAddr, settings.staticGateway, settings.staticSubnetMask);
+    } else {
+      WiFi.config(settings.staticIPAddr, settings.staticGateway, settings.staticSubnetMask);
     }
   }
 }

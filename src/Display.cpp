@@ -475,20 +475,11 @@ static void drawUpdatingScreen() {
 }
 
 // One centered P/T/Z bar, drawn dark-on-amber for the save popup.
-static void savedBar(int by, const char* lab, int val) {
-  txt(FONT_TINY, BLACK, 20, by, lab);
-  int bx = 78, bw = 216, cx = bx + bw / 2;
-  gfx->fillRect(bx, by - 8, bw, 6, C565(190, 150, 15));
-  gfx->drawFastVLine(cx, by - 11, 12, BLACK);
-  float n = ( val / (float)AnalogMax ) * 2.0f - 1.0f;
-  int end = cx + (int)( n * ( bw / 2 ) );
-  int fx = end < cx ? end : cx;
-  int fw = end < cx ? cx - end : end - cx; if ( fw < 1 ) fw = 1;
-  gfx->fillRect(fx, by - 8, fw, 6, BLACK);
-}
-
 // Full-screen confirmation after OVERRIDE+tap saves a preset. Shown ~2.5s over
 // the console (the control loop keeps running, so the joystick isn't frozen).
+// We deliberately do NOT draw the pan/tilt/zoom position here: the joystick is a
+// velocity control and the preset is stored on the camera, so the controller has
+// no truthful notion of "the saved position" to show.
 static void drawPresetSaved() {
   int active = getActiveCamera();
   gfx->fillScreen(COL_AMBER);
@@ -499,18 +490,25 @@ static void drawPresetSaved() {
   String name = String(atemSwitcher.getInputShortName(active + 1));
   if ( name.length() == 0 ) name = "CAM " + String(active + 1);
   char cam[40]; snprintf(cam, sizeof(cam), "CAM %d  %s", active + 1, name.c_str());
-  txt(FONT_MD, BLACK, 20, 74, cam);
+  txtVC(FONT_MD, BLACK, 20, 70, 40, cam);
 
-  savedBar(114, "PAN",  analogRead(PIN_PAN));
-  savedBar(146, "TILT", analogRead(PIN_TILT));
-  savedBar(178, "ZOOM", analogRead(PIN_ZOOM));
-
-  txt(FONT_TINY, C565(90, 66, 0), 20, 214, "Tap the button to recall this position.");
+  char hint[48];
+  snprintf(hint, sizeof(hint), "Tap button %d to recall this position.", presetSaveNum);
+  txt(FONT_TINY, C565(90, 66, 0), 20, 150, hint);
 }
 
 void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int zoomSpeed) {
+  sampleTx();   // internally throttled to 1Hz; keep it at full loop rate
+
+  // Cap the redraw rate. A full fillScreen + flush pushes the whole ~150KB
+  // framebuffer over SPI; doing that every control-loop iteration needlessly
+  // competes with camera I/O and joystick handling. 30fps is smooth for this UI.
+  static uint32_t lastFrame = 0;
+  uint32_t nowFrame = millis();
+  if ( nowFrame - lastFrame < 33 ) return;
+  lastFrame = nowFrame;
+
   gfx->fillScreen(BLACK);
-  sampleTx();
 
   // Screen state machine: OTA / config (AP-only) / connecting / console.
   if ( g_otaActive )                          { drawUpdatingScreen();   gfx->flush(); return; }
