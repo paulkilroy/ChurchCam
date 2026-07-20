@@ -69,7 +69,8 @@ void cameraControlSetup() {
   displaySetup();
 
   // Draw the inital screen once
-  displayLoop(0, 0, 0, 0, 0, 0);
+  JoystickState js = { 0, 0, 0, 0, 0, 0 };
+  displayLoop(js);
 }
 
 void setupDefaults() {
@@ -200,7 +201,6 @@ void buttonLoop() {
 }
 
 void cameraControlLoop() {
-  // TODO Move these to globals panPosition, etc
   int pan = analogRead(PIN_PAN);
   int tilt = analogRead(PIN_TILT);
   int zoom = analogRead(PIN_ZOOM);
@@ -236,8 +236,12 @@ void cameraControlLoop() {
   // only once MAX_SEND ms -- 100ms max UNLESS YOU ARE TRYING TO STOP THE CAMMERA -- then do that ASAP
   unsigned long currentSendTime = millis();
   if ( idle || ( currentSendTime - LastSendTime > MAX_SEND ) ) {
-    // TODO Separate out panTilt and zoom, then put repeate check by message type in 
-    // the visca send function
+    // ptzDrive sends two VISCA packets (pan/tilt + zoom). visca_send keeps a
+    // single "previous packet" for dup-suppression, so while both axes drive it
+    // never matches and every packet goes out at ~10Hz -- which is fine: that is
+    // normal continuous-drive behavior, and ptzDrive already suppresses redundant
+    // STOPs locally via pt_stopped/zoom_stopped. Per-message-type dedup would be a
+    // micro-optimization with no practical benefit, so it is intentionally omitted.
     if (isVisca(getActiveCamera())) {
       ptzDrive(panSpeed, tiltSpeed, zoomSpeed);
     } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
@@ -252,6 +256,8 @@ void cameraControlLoop() {
       ,pan, panSpeed, tilt, tiltSpeed, zoom, zoomSpeed);
     broadcastTelemetry(msg);
   }
-    buttonLoop();
-    displayLoop(pan, tilt, zoom, panSpeed, tiltSpeed, zoomSpeed);
+  buttonLoop();
+
+  JoystickState js = { pan, tilt, zoom, panSpeed, tiltSpeed, zoomSpeed };
+  displayLoop(js);
 }

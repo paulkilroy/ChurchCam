@@ -8,19 +8,17 @@
 #include <EEPROM.h>
 #include <ATEMmin.h>
 
-/* TODO New Design
--------------
-ChurchCam - Main loop of getting state and passing it through the loops for each file
-    -Get joystick pos, button presses, network state, sim state(?)
-Settings - Handles webconfig/save eeprom load/save
-(Input)ATEM - discovery, atem setup/loop
-(I/O??)Network - setup / maint of eth/wifi (wificallbacks) / helper methods for wifi vs eth / DNS / mDNS
-(Input)Board - config board / get characteristics
-(Input)Controller - joystick and buttons
-(Output)Display - screen refresh (has to talk to)
-(Output)Visca/ONVIF
-Change Logging to LogUtils
-Change NetworkUtils to CameraUtils
+/* Module map
+   ----------
+   ChurchCam    - setup() + loop(); owns global state (ATEM, sim flag, pinouts)
+   Controller   - joystick + buttons + the per-tick control loop; camera health poll
+   Display      - operator console + edge-state screens (renders from JoystickState)
+   Network      - eth/wifi bring-up, callbacks, static IP, DNS/mDNS, helper accessors
+   CameraLink   - per-camera BSD-socket transport (UDP/TCP): camConnect/Send/Recv/Close
+   Visca        - VISCA protocol: drive/zoom/preset commands, power-inquiry status
+   Onvif        - ONVIF/SOAP protocol: PTZ + presets, TCP-reachability status
+   Web          - PsychicHttp config/status pages, /ws telemetry, OTA upload
+   Logging      - cross-task-safe log ring shared by the loop, WiFi task, and web task
 */
 
 //Initialize global variables

@@ -128,6 +128,15 @@ struct LogItem {
   char buf[256];
 };
 
+// One tick of joystick input, bundled so the control loop and the display share
+// a single value instead of threading six ints through every call. Kept as a
+// passed-by-const-ref parameter (not a global) so it stays confined to the
+// main-loop task and can't be torn by the async web task.
+struct JoystickState {
+  int pan, tilt, zoom;                 // raw analogRead positions (0..AnalogMax)
+  int panSpeed, tiltSpeed, zoomSpeed;  // mapped VISCA drive speeds (signed)
+};
+
 // A camera found by auto-discovery (VISCA broadcast or ONVIF WS-Discovery).
 // Cameras are identified by ip+port, so multiple cameras may share one IP.
 struct DiscoveredCamera {
@@ -166,7 +175,7 @@ void cameraControlSetup();
 void calibrateCenter();
 void autoCalibrate();
 void displayCalibrateScreen(String direction, int pct, int p, int t, int z);
-void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int zoomSpeed);
+void displayLoop(const JoystickState& js);
 void displaySetup();
 void drawButton1();
 void drawButton2();

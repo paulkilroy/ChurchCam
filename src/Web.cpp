@@ -148,7 +148,7 @@ String processor(const String& var) {
 // ---------------------------------------------------------------------------
 
 // Broadcast one telemetry frame to every connected /ws client. Called from the
-// camera-control loop; keeps PsychicHttp types out of CameraControl.cpp.
+// camera-control loop; keeps PsychicHttp types out of Controller.cpp.
 void broadcastTelemetry(const char* msg) {
   ptzWs.sendAll(HTTPD_WS_TYPE_TEXT, (void*)msg, strlen(msg));
 }

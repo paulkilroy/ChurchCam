@@ -497,7 +497,7 @@ static void drawPresetSaved() {
   txt(FONT_TINY, C565(90, 66, 0), 20, 150, hint);
 }
 
-void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int zoomSpeed) {
+void displayLoop(const JoystickState& js) {
   sampleTx();   // internally throttled to 1Hz; keep it at full loop rate
 
   // Cap the redraw rate. A full fillScreen + flush pushes the whole ~150KB
@@ -524,7 +524,7 @@ void displayLoop(int pan, int tilt, int zoom, int panSpeed, int tiltSpeed, int z
 
   drawHeader(active);
   drawTallyBox(active, tally);
-  drawRadar(pan, tilt, zoom, tally);
+  drawRadar(js.pan, js.tilt, js.zoom, tally);
   drawCameraStrip(active);
   drawHistogram();
 
