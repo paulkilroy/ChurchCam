@@ -3,6 +3,9 @@
 #include <time.h>
 #include <lwip/sockets.h>
 #include <errno.h>
+#include <esp_random.h>
+#include <mbedtls/sha1.h>
+#include <mbedtls/base64.h>
 
 // https://blog.devmobile.co.nz/2021/08/26/security-camera-onvif-discovery/
 
@@ -33,138 +36,75 @@ char WSDiscoveryProbeMessages[] =
 "</e:Envelope>";
 */
 
-// NOTE: the WS-Security UsernameToken below is still hardcoded from a captured
-// session (fixed Username/Password digest/Nonce/Created). Per-camera credentials
-// now live in settings.cameraUser[]/cameraPass[] (captured by the config page),
-// but generating a valid token requires: SHA1(Nonce + Created + password) ->
-// base64 for <Password>, a random <Nonce>, and a <Created> timestamp within the
-// camera's clock-skew window (needs NTP). Deferred to hardware bring-up, where it
-// can be validated against a real camera -- a wrong digest is indistinguishable
-// from a network failure otherwise. See TODOs on the individual fields.
-const char stopFormat[] =
+// SOAP envelope, WS-Security header, and per-action bodies are kept separate so
+// the security header (with a freshly computed digest) can be regenerated on
+// every request. buildOnvifMessage() fills securityFormat, wraps it + a body in
+// envelopeFormat, then wraps that in httpFormat.
+//
+// The <Password> is a WS-UsernameToken PasswordDigest:
+//   digest = Base64( SHA1( nonceBytes + Created + password ) )
+// with a random per-request nonce and a real UTC <Created> (needs NTP).
+const char envelopeFormat[] =
 "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">\r\n"
 "<s:Header>\r\n"
-"<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\r\n"
-"<UsernameToken>\r\n"
-"<Username>admin</Username>\r\n"
-"<Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">Lv8CmS+6HqXZ/vGm8R7k1j2tKM4=</Password>\r\n"//TODO: make this with sha and base64
-"<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">f2+oEzPKt7++/EQZBog05OoqI9Q=</Nonce>\r\n"//TODO: find out what this is
-"<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">2024-02-21T22:06:08.000Z</Created>\r\n"//TODO: correctly generate the date
-"</UsernameToken>\r\n"
-"</Security>\r\n"
+"%s"                 // WS-Security header (securityFormat, already formatted)
 "</s:Header>\r\n"
 "<s:Body>\r\n"
-"<Stop xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
-"<Zoom>%s</Zoom>\r\n"
-"<ProfileToken>Profile_1</ProfileToken>\r\n"//TODO: read the profile token and plug it in here
-"<PanTilt>%s</PanTilt>\r\n"
-"</Stop>\r\n"
+"%s"                 // action body
 "</s:Body>\r\n"
 "</s:Envelope>\r\n";
 
-const char zoomFormat[] = 
-"<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">\r\n"
-"<s:Header>\r\n"
+const char securityFormat[] =
 "<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\r\n"
 "<UsernameToken>\r\n"
-"<Username>admin</Username>\r\n"
-"<Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">Lv8CmS+6HqXZ/vGm8R7k1j2tKM4=</Password>\r\n"//TODO: make this with sha and base64
-"<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">f2+oEzPKt7++/EQZBog05OoqI9Q=</Nonce>\r\n"//TODO: find out what this is
-"<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">2024-02-21T22:06:08.000Z</Created>\r\n"//TODO: correctly generate the date
+"<Username>%s</Username>\r\n"
+"<Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">%s</Password>\r\n"
+"<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">%s</Nonce>\r\n"
+"<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">%s</Created>\r\n"
 "</UsernameToken>\r\n"
-"</Security>\r\n"
-"</s:Header>\r\n"
-"<s:Body>\r\n"
+"</Security>\r\n";
+
+// Action bodies (ProfileToken still hardcoded -- TODO: read it from the camera).
+const char stopBody[] =
+"<Stop xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
+"<Zoom>%s</Zoom>\r\n"
+"<ProfileToken>Profile_1</ProfileToken>\r\n"
+"<PanTilt>%s</PanTilt>\r\n"
+"</Stop>\r\n";
+
+const char zoomBody[] =
 "<ContinuousMove xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
 "<ProfileToken>Profile_1</ProfileToken>\r\n"
 "<Velocity>\r\n"
 "<Zoom x=\"%1.2f\" xmlns=\"http://www.onvif.org/ver10/schema\">\r\n"
 "</Zoom>\r\n"
 "</Velocity>\r\n"
-"</ContinuousMove>\r\n"
-"</s:Body>\r\n"
-"</s:Envelope>\r\n";
+"</ContinuousMove>\r\n";
 
-const char velFormat[] = 
-"<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">\r\n"
-"<s:Header>\r\n"
-"<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\r\n"
-"<UsernameToken>\r\n"
-"<Username>admin</Username>\r\n"
-"<Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">Lv8CmS+6HqXZ/vGm8R7k1j2tKM4=</Password>\r\n"//TODO: make this with sha and base64
-"<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">f2+oEzPKt7++/EQZBog05OoqI9Q=</Nonce>\r\n"//TODO: find out what this is
-"<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">2024-02-21T22:06:08.000Z</Created>\r\n"//TODO: correctly generate the date
-"</UsernameToken>\r\n"
-"</Security>\r\n"
-"</s:Header>\r\n"
-"<s:Body>\r\n"
+const char velBody[] =
 "<ContinuousMove xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
 "<ProfileToken>Profile_1</ProfileToken>\r\n"
 "<Velocity>\r\n"
 "<PanTilt xmlns=\"http://www.onvif.org/ver10/schema\" x=\"%1.3f\" y=\"%1.3f\"/>\r\n"
 "</Velocity>\r\n"
-"</ContinuousMove>\r\n"
-"</s:Body>\r\n"
-"</s:Envelope>\r\n";
+"</ContinuousMove>\r\n";
 
-const char setPresetFormat[] = 
-"<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">\r\n"
-"<s:Header>\r\n"
-"<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\r\n"
-"<UsernameToken>\r\n"
-"<Username>admin</Username>\r\n"
-"<Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">Lv8CmS+6HqXZ/vGm8R7k1j2tKM4=</Password>\r\n"//TODO: make this with sha and base64
-"<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">f2+oEzPKt7++/EQZBog05OoqI9Q=</Nonce>\r\n"//TODO: find out what this is
-"<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">2024-02-21T22:06:08.000Z</Created>\r\n"//TODO: correctly generate the date
-"</UsernameToken>\r\n"
-"</Security>\r\n"
-"</s:Header>\r\n"
-"<s:Body>\r\n"
+const char setPresetBody[] =
 "<SetPreset xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
 "<ProfileToken>Profile_1</ProfileToken>\r\n"
 "<PresetToken>%d</PresetToken>\r\n"
-"</SetPreset>\r\n"
-"</s:Body>\r\n"
-"</s:Envelope>\r\n";
+"</SetPreset>\r\n";
 
-const char goToPresetFormat[] = 
-"<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">\r\n"
-"<s:Header>\r\n"
-"<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\r\n"
-"<UsernameToken>\r\n"
-"<Username>admin</Username>\r\n"
-"<Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">Lv8CmS+6HqXZ/vGm8R7k1j2tKM4=</Password>\r\n"//TODO: make this with sha and base64
-"<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">f2+oEzPKt7++/EQZBog05OoqI9Q=</Nonce>\r\n"//TODO: find out what this is
-"<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">2024-02-21T22:06:08.000Z</Created>\r\n"//TODO: correctly generate the date
-"</UsernameToken>\r\n"
-"</Security>\r\n"
-"</s:Header>\r\n"
-"<s:Body>\r\n"
+const char goToPresetBody[] =
 "<GotoPreset xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
 "<ProfileToken>Profile_1</ProfileToken>\r\n"
 "<PresetToken>%d</PresetToken>\r\n"
-"</GotoPreset>\r\n"
-"</s:Body>\r\n"
-"</s:Envelope>\r\n";
+"</GotoPreset>\r\n";
 
-const char getPresetsFormat[] = 
-"<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">\r\n"
-"<s:Header>\r\n"
-"<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\r\n"
-"<UsernameToken>\r\n"
-"<Username>admin</Username>\r\n"
-"<Password Type=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordDigest\">QkM4OtrhqKSTjc/StAi/sM6xafY=</Password>\r\n"//TODO: make this with sha and base64
-"<Nonce EncodingType=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary\">61YGabGnG1m4ie1RJotpl7wHmSQ=</Nonce>\r\n"//TODO: find out what this is
-"<Created xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd\">2024-02-06T03:46:53.000Z</Created>\r\n"//TODO: correctly generate the date
-"</UsernameToken>\r\n"
-"</Security>\r\n"
-"</s:Header>\r\n"
-"<s:Body>\r\n"
+const char getPresetsBody[] =
 "<GetPresets xmlns=\"http://www.onvif.org/ver20/ptz/wsdl\">\r\n"
 "<ProfileToken>Profile_1</ProfileToken>\r\n"
-"</GetPresets>\r\n"
-"</s:Body>\r\n"
-"</s:Envelope>\r\n";
+"</GetPresets>\r\n";
 
 const char httpFormat[] =
 "POST /onvif/PTZ HTTP/1.1\r\n"
@@ -177,10 +117,75 @@ const char httpFormat[] =
 "\r\n"
 "%s";
 
-char soapBuf[1000];
-char messageBuf[1500];
+char soapBuf[1800];
+char messageBuf[2400];
+char securityBuf[640];
 
 int prevPan = 0, prevTilt = 0, prevZoom = 0;
+
+// --- WS-Security digest helpers -------------------------------------------
+
+// UTC <Created> timestamp in ONVIF form, e.g. 2026-07-21T04:20:20.000Z. Returns
+// false (but still fills buf) if SNTP hasn't synced yet -- the clock reads ~1970
+// then, which a real camera rejects for skew; the caller logs a warning.
+static bool onvifCreatedNow(char* buf, size_t cap) {
+  time_t now = time(nullptr);
+  struct tm tmv;
+  gmtime_r(&now, &tmv);
+  char t[24];
+  strftime(t, sizeof t, "%Y-%m-%dT%H:%M:%S", &tmv);
+  snprintf(buf, cap, "%s.000Z", t);
+  return tmv.tm_year + 1900 >= 2020;   // synced if the year is sane
+}
+
+// Build the WS-Security header for one request into securityBuf: fresh random
+// nonce, current Created, and PasswordDigest = Base64(SHA1(nonce+Created+pass)).
+static void onvifBuildSecurity(int cam) {
+  const char* user = settings.cameraUser[cam];
+  const char* pass = settings.cameraPass[cam];
+
+  uint8_t nonce[16];
+  for ( int i = 0; i < 16; i += 4 ) {
+    uint32_t r = esp_random();
+    memcpy(nonce + i, &r, 4);
+  }
+  char nonceB64[32]; size_t nb = 0;
+  mbedtls_base64_encode((unsigned char*)nonceB64, sizeof nonceB64, &nb, nonce, sizeof nonce);
+  nonceB64[nb] = '\0';
+
+  char created[32];
+  if ( !onvifCreatedNow(created, sizeof created) )
+    logw("ONVIF: clock not NTP-synced yet; camera %d may reject the timestamp", cam + 1);
+
+  // SHA1( nonce || Created || password )
+  uint8_t digest[20];
+  {
+    mbedtls_sha1_context ctx;
+    mbedtls_sha1_init(&ctx);
+    mbedtls_sha1_starts(&ctx);
+    mbedtls_sha1_update(&ctx, nonce, sizeof nonce);
+    mbedtls_sha1_update(&ctx, (const unsigned char*)created, strlen(created));
+    mbedtls_sha1_update(&ctx, (const unsigned char*)pass, strlen(pass));
+    mbedtls_sha1_finish(&ctx, digest);
+    mbedtls_sha1_free(&ctx);
+  }
+  char digestB64[32]; size_t db = 0;
+  mbedtls_base64_encode((unsigned char*)digestB64, sizeof digestB64, &db, digest, sizeof digest);
+  digestB64[db] = '\0';
+
+  snprintf(securityBuf, sizeof securityBuf, securityFormat, user, digestB64, nonceB64, created);
+}
+
+// Compose one full HTTP request (headers + signed SOAP envelope) into messageBuf
+// for the given camera and pre-formatted action body.
+static void onvifBuildMessage(int cam, const char* body) {
+  onvifBuildSecurity(cam);
+  snprintf(soapBuf, sizeof soapBuf, envelopeFormat, securityBuf, body);
+  snprintf(messageBuf, sizeof messageBuf, httpFormat,
+    settings.cameraIP[cam][0], settings.cameraIP[cam][1],
+    settings.cameraIP[cam][2], settings.cameraIP[cam][3],
+    (int)strlen(soapBuf), soapBuf);
+}
 
 /*
 Velocity [PTZSpeed]
@@ -248,41 +253,42 @@ void initialize() {
 }
 
 void Onvif_GoToPreset( int presetNumber ) {
-    int cameraNumber = getActiveCamera();
-    sprintf(soapBuf, goToPresetFormat, presetNumber);
-    sprintf(messageBuf, httpFormat, settings.cameraIP[cameraNumber][0], settings.cameraIP[cameraNumber][1], settings.cameraIP[cameraNumber][2], settings.cameraIP[cameraNumber][3], strlen(soapBuf), soapBuf);
-    onvif_send( cameraNumber );
+    int cam = getActiveCamera();
+    char body[160]; snprintf(body, sizeof body, goToPresetBody, presetNumber);
+    onvifBuildMessage(cam, body);
+    onvif_send(cam);
 }
 
 void Onvif_GetPresets( int cameraNumber ) {
-    sprintf(messageBuf, httpFormat, settings.cameraIP[cameraNumber][0], settings.cameraIP[cameraNumber][1], settings.cameraIP[cameraNumber][2], settings.cameraIP[cameraNumber][3], strlen(getPresetsFormat), getPresetsFormat);
-    onvif_send( cameraNumber );
+    onvifBuildMessage(cameraNumber, getPresetsBody);
+    onvif_send(cameraNumber);
 }
 
 void Onvif_SetPreset( int presetNumber ) {
-    int cameraNumber = getActiveCamera();
-    sprintf(soapBuf, setPresetFormat, presetNumber);
-    sprintf(messageBuf, httpFormat, settings.cameraIP[cameraNumber][0], settings.cameraIP[cameraNumber][1], settings.cameraIP[cameraNumber][2], settings.cameraIP[cameraNumber][3], strlen(soapBuf),soapBuf);
-    onvif_send( cameraNumber );
+    int cam = getActiveCamera();
+    char body[160]; snprintf(body, sizeof body, setPresetBody, presetNumber);
+    onvifBuildMessage(cam, body);
+    onvif_send(cam);
 }
 
 void Onvif_ZoomDrive(int zoomSpeed) {
-    
+
 }
 
 void Onvif_PanTiltDrive(int panSpeed, int tiltSpeed) {
     int cam = getActiveCamera();
-    // velFormat uses %1.3f -- pass normalized doubles, not ints (varargs UB).
-    sprintf(soapBuf, velFormat, panSpeed / 15.0, tiltSpeed / 15.0);
-    sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
+    // velBody uses %1.3f -- pass normalized doubles, not ints (varargs UB).
+    char body[320]; snprintf(body, sizeof body, velBody, panSpeed / 15.0, tiltSpeed / 15.0);
+    onvifBuildMessage(cam, body);
     logi("Sending pan tilt message x:%d y:%d", panSpeed, tiltSpeed);
     onvif_send(cam);
 }
 
 void Onvif_Stop(bool stopPanTilt, bool stopZoom) {
     int cam = getActiveCamera();
-    sprintf(soapBuf, stopFormat, "true", "false");
-    sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
+    char body[220]; snprintf(body, sizeof body, stopBody,
+                             stopZoom ? "true" : "false", stopPanTilt ? "true" : "false");
+    onvifBuildMessage(cam, body);
     logi("Stopping");
     onvif_send(cam);
 }
@@ -301,30 +307,25 @@ void Onvif_PtzDrive( int panSpeed, int tiltSpeed, int zoomSpeed ) {
     //Values must be between -1 and 1
 
     if ((zoomSpeed == 0) && (prevZoom != 0)) {
-        sprintf(soapBuf, stopFormat, "true", "false");
-        sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
+        char body[220]; snprintf(body, sizeof body, stopBody, "true", "false");   // stop Zoom, leave PanTilt
+        onvifBuildMessage(cam, body);
         logi("Stopping zoom");
         onvif_send(cam);
     } else {
-        sprintf(soapBuf, zoomFormat, zoomSpeed/7.0);
-        sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
+        char body[320]; snprintf(body, sizeof body, zoomBody, zoomSpeed / 7.0);
+        onvifBuildMessage(cam, body);
         logi("Sending zoom message z:%d", zoomSpeed);
         onvif_send(cam);
     }
     //logi("cp:%d pp:%d ct:%d pt:%d", panSpeed, prevPan, tiltSpeed, prevTilt);
     if (((panSpeed == 0) && (tiltSpeed == 0)) && ((prevPan != 0) || (prevTilt != 0))) {
-        // Build the SOAP body first -- previously this sent the raw stopFormat
-        // template with unfilled %s placeholders, so the camera never stopped.
-        sprintf(soapBuf, stopFormat, "false", "true");   // stop PanTilt, leave Zoom
-        sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
+        char body[220]; snprintf(body, sizeof body, stopBody, "false", "true");   // stop PanTilt, leave Zoom
+        onvifBuildMessage(cam, body);
         logi("Stopping pan tilt");
         onvif_send(cam);
     } else {
-        sprintf(soapBuf, velFormat, panSpeed/15.0, tiltSpeed/15.0);
-        //Set previous values to check next time
-    //logi("%s %d", velBuf, strlen(velBuf));
-        sprintf(messageBuf, httpFormat, settings.cameraIP[cam][0], settings.cameraIP[cam][1], settings.cameraIP[cam][2], settings.cameraIP[cam][3], strlen(soapBuf), soapBuf);
-    //logi("%s %d", messageBuf, strlen(messageBuf));
+        char body[320]; snprintf(body, sizeof body, velBody, panSpeed / 15.0, tiltSpeed / 15.0);
+        onvifBuildMessage(cam, body);
         logi("Sending pan tilt message x:%d y:%d", panSpeed, tiltSpeed);
         onvif_send(cam);
     }

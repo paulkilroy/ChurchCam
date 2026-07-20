@@ -22,6 +22,7 @@
 const http = require('http');
 const net = require('net');
 const dgram = require('dgram');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -39,12 +40,19 @@ const LAN_IP = (() => {
   return '127.0.0.1';
 })();
 
+// ONVIF WS-Security credentials the two ONVIF cameras expect. The firmware
+// preloads these same values for the sim cameras (configureSimulatorTargets in
+// Network.cpp), so auth passes out of the box; change one side to see the sim
+// reject the request the way a real camera would.
+const ONVIF_USER = 'admin';
+const ONVIF_PASS = 'churchcam';
+
 // View index -> transport. ATEM input (index+1) selects the view.
 const VIEWS = [
   { id: 0, name: 'Camera 1', proto: 'VISCA', transport: 'udp', port: 52381, framed: true },
   { id: 1, name: 'Camera 2', proto: 'VISCA', transport: 'tcp', port: 52382, framed: false },
-  { id: 2, name: 'Camera 3', proto: 'ONVIF', transport: 'http', port: 8083 },
-  { id: 3, name: 'Camera 4', proto: 'ONVIF', transport: 'http', port: 8084 },
+  { id: 2, name: 'Camera 3', proto: 'ONVIF', transport: 'http', port: 8083, user: ONVIF_USER, pass: ONVIF_PASS },
+  { id: 3, name: 'Camera 4', proto: 'ONVIF', transport: 'http', port: 8084, user: ONVIF_USER, pass: ONVIF_PASS },
 ];
 
 // ---------------------------------------------------------------------------
@@ -273,17 +281,61 @@ const ONVIF_RESPONSE =
   '<?xml version="1.0" encoding="UTF-8"?>' +
   '<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"><s:Body/></s:Envelope>';
 
+// SOAP Fault a real ONVIF camera returns when the UsernameToken is missing/wrong.
+const ONVIF_FAULT =
+  '<?xml version="1.0" encoding="UTF-8"?>' +
+  '<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">' +
+  '<s:Body><s:Fault><s:Code><s:Value>s:Sender</s:Value>' +
+  '<s:Subcode><s:Value>ter:NotAuthorized</s:Value></s:Subcode></s:Code>' +
+  '<s:Reason><s:Text xml:lang="en">Sender not authorized</s:Text></s:Reason>' +
+  '</s:Fault></s:Body></s:Envelope>';
+
+// Validate a WS-Security UsernameToken exactly as a real camera would:
+//   digest = Base64( SHA1( nonceBytes + Created + password ) )
+// The digest is the actual auth proof. Timestamp skew (replay protection) is
+// reported but NOT enforced, so a correct implementation still validates when the
+// controller's clock isn't NTP-synced -- a real camera WOULD reject on skew.
+function validateWsse(body, view) {
+  const grab = (re) => { const m = body.match(re); return m ? m[1] : null; };
+  const user = grab(/<Username>([^<]*)<\/Username>/);
+  const dig = grab(/<Password[^>]*>([^<]*)<\/Password>/);
+  const nonceB64 = grab(/<Nonce[^>]*>([^<]*)<\/Nonce>/);
+  const created = grab(/<Created[^>]*>([^<]*)<\/Created>/);
+  if (!user || !dig || !nonceB64 || !created) return { ok: false, reason: 'missing WS-Security UsernameToken' };
+  if (user !== view.user) return { ok: false, reason: `unknown user "${user}"` };
+
+  const sha = crypto.createHash('sha1');
+  sha.update(Buffer.from(nonceB64, 'base64'));
+  sha.update(created, 'utf8');
+  sha.update(view.pass, 'utf8');
+  const expected = sha.digest('base64');
+  if (expected !== dig) return { ok: false, reason: 'password digest mismatch' };
+
+  const t = Date.parse(created);
+  const skew = isNaN(t) ? null : Math.round(Math.abs(Date.now() - t) / 1000);
+  if (skew !== null && skew > 300)
+    console.log(`cam${view.id + 1}: ONVIF auth OK but Created skew ${skew}s (>300s) -- a real camera would reject; check NTP`);
+  return { ok: true };
+}
+
 for (const view of VIEWS.filter((v) => v.transport === 'http')) {
   const srv = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
+      const auth = validateWsse(body, view);
+      if (!auth.ok) {
+        logCmd(view.id, `ONVIF auth REJECTED: ${auth.reason}`);
+        res.writeHead(400, { 'Content-Type': 'application/soap+xml; charset=utf-8' });
+        res.end(ONVIF_FAULT);   // do NOT move the camera on a rejected request
+        return;
+      }
       parseOnvif(body, view);
       res.writeHead(200, { 'Content-Type': 'application/soap+xml; charset=utf-8' });
       res.end(ONVIF_RESPONSE);
     });
   });
-  srv.listen(view.port, () => console.log(`cam${view.id + 1}: ONVIF  HTTP :${view.port}`));
+  srv.listen(view.port, () => console.log(`cam${view.id + 1}: ONVIF  HTTP :${view.port} (user=${view.user})`));
 }
 
 // ---------------------------------------------------------------------------

@@ -75,6 +75,10 @@ static void configureSimulatorTargets(const char info[]) {
     settings.cameraType[i]      = types[i];
     settings.cameraTransport[i] = transports[i];
     settings.cameraHeaders[i]   = headers[i];
+    if (types[i] == CAM_ONVIF) {   // match the sim's ONVIF_USER/ONVIF_PASS
+      strlcpy(settings.cameraUser[i], "admin",     sizeof(settings.cameraUser[i]));
+      strlcpy(settings.cameraPass[i], "churchcam", sizeof(settings.cameraPass[i]));
+    }
   }
 }
 
@@ -85,6 +89,13 @@ void networkSetup(const char info[]) {
   // In the simulator, target the host's Node camera/ATEM sims before anything
   // that reads switcherIP/cameraIP (discoverATEM, atemSwitcher.connect).
   if (InSimulator) configureSimulatorTargets(info);
+
+  // Kick off SNTP so we have real UTC. ONVIF WS-Security needs a <Created>
+  // timestamp within the camera's clock-skew window, and the log timestamps
+  // benefit too. configTime is async (non-blocking); time becomes valid a moment
+  // later -- callers must tolerate "not synced yet" (see onvifCreatedNow()).
+  // UTC only (offset 0, no DST); ONVIF Created is always UTC ("...Z").
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
   // Set up mDNS hostname so people can go to hostname.local without the IP address
   if (!MDNS.begin(getHostname())) {
