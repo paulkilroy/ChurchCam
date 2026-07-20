@@ -33,7 +33,15 @@ char WSDiscoveryProbeMessages[] =
 "</e:Envelope>";
 */
 
-const char stopFormat[] = 
+// NOTE: the WS-Security UsernameToken below is still hardcoded from a captured
+// session (fixed Username/Password digest/Nonce/Created). Per-camera credentials
+// now live in settings.cameraUser[]/cameraPass[] (captured by the config page),
+// but generating a valid token requires: SHA1(Nonce + Created + password) ->
+// base64 for <Password>, a random <Nonce>, and a <Created> timestamp within the
+// camera's clock-skew window (needs NTP). Deferred to hardware bring-up, where it
+// can be validated against a real camera -- a wrong digest is indistinguishable
+// from a network failure otherwise. See TODOs on the individual fields.
+const char stopFormat[] =
 "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">\r\n"
 "<s:Header>\r\n"
 "<Security s:mustUnderstand=\"1\" xmlns=\"http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd\">\r\n"

@@ -54,7 +54,7 @@
 // EEPROM settings header. Bump SETTINGS_VERSION on any Settings layout change so
 // old/blank EEPROM is detected and reset to defaults instead of read as garbage.
 #define SETTINGS_MAGIC   0x43436D31u  // "CCm1"
-#define SETTINGS_VERSION 2            // v2: NUM_CAMERAS 20 -> 8 (Settings layout shrank)
+#define SETTINGS_VERSION 3            // v2: NUM_CAMERAS 20->8; v3: per-camera ONVIF user/pass
 
 #define BOARD_NAME Pinouts[HWRev].name       // Board
 #define PIN_TILT Pinouts[HWRev].tilt         // Yellow
@@ -120,6 +120,8 @@ struct Settings {
   uint8_t cameraTransport[NUM_CAMERAS + 1];  // CAM_UDP   | CAM_TCP
   uint16_t cameraPort[NUM_CAMERAS + 1];
   uint8_t cameraHeaders[NUM_CAMERAS + 1];
+  char cameraUser[NUM_CAMERAS + 1][24];      // ONVIF WS-Security username (VISCA ignores)
+  char cameraPass[NUM_CAMERAS + 1][24];      // ONVIF WS-Security password (VISCA ignores)
 };
 
 struct LogItem {

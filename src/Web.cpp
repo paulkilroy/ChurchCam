@@ -89,7 +89,7 @@ String processor(const String& var) {
     return serverVars;
   } else if ( var == "ATEMCameras" ) {
     //       { "id": "0", "status": "down", "name": "Camera 1", "ip": "10.0.4.40", "port": "5678", "type": "0", "transport": "1", "headers": "0" },
-    const char cfmt[] = "{ \"id\": \"%d\", \"status\": \"%s\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%d\", \"type\": \"%d\", \"transport\": \"%d\", \"headers\": \"%d\" },\n";
+    const char cfmt[] = "{ \"id\": \"%d\", \"status\": \"%s\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%d\", \"type\": \"%d\", \"transport\": \"%d\", \"headers\": \"%d\", \"user\": \"%s\" },\n";
     int cameraNumber = 0;
     for ( uint16_t i = 0; i < NUM_CAMERAS; i++ ) {
       // If no switcher than show all potential inputs...
@@ -107,7 +107,7 @@ String processor(const String& var) {
 
       String camName = atemSwitcher.getInputShortName(i);
       if ( camName == "" ) camName = "Camera " + String(i);
-      char input[150];
+      char input[220];
       // Options for camera status
       //    -compute status from responses(?) or just last response
       //  * -explicit status on page generation (way it was working)
@@ -121,7 +121,8 @@ String processor(const String& var) {
         settings.cameraPort[cameraNumber],
         settings.cameraType[cameraNumber],
         settings.cameraTransport[cameraNumber],
-        settings.cameraHeaders[cameraNumber]);
+        settings.cameraHeaders[cameraNumber],
+        settings.cameraUser[cameraNumber]);
       cameraNumber++;
       serverVars += input;
     }
@@ -243,6 +244,10 @@ static esp_err_t handleSave(PsychicRequest* request, PsychicResponse* response) 
     if ( (p = request->getParam(("camConfigType" + n).c_str())) )      settings.cameraType[i]      = p->value().toInt(); // CAM_VISCA | CAM_ONVIF
     if ( (p = request->getParam(("camConfigTransport" + n).c_str())) ) settings.cameraTransport[i] = p->value().toInt(); // CAM_UDP   | CAM_TCP
     if ( (p = request->getParam(("camConfigPort" + n).c_str())) )      settings.cameraPort[i]      = p->value().toInt();
+    if ( (p = request->getParam(("camConfigUser" + n).c_str())) )      strlcpy(settings.cameraUser[i], p->value().c_str(), sizeof(settings.cameraUser[i]));
+    // Password is only echoed as blank, so an empty field means "keep existing".
+    if ( (p = request->getParam(("camConfigPass" + n).c_str())) && p->value().length() )
+                                                                       strlcpy(settings.cameraPass[i], p->value().c_str(), sizeof(settings.cameraPass[i]));
   }
 
   // VISCA-IP header framing: VISCA over UDP is framed, VISCA over TCP is raw.

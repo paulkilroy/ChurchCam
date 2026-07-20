@@ -179,6 +179,8 @@
         document.querySelectorAll("#" + clone.id + "  #camConfigTransport")[0].name = "camConfigTransport" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].name = "camConfigIP" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].name = "camConfigPort" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigUser")[0].name = "camConfigUser" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigPass")[0].name = "camConfigPass" + i;
         // document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].id = "camConfigToggle" + i;
 
         // ?? need to save and restore the toggle, then select the toggle as clicked
@@ -189,13 +191,17 @@
         document.querySelectorAll("#" + clone.id + "  #camConfigTransport")[0].id = "camConfigTransport" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].id = "camConfigIP" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].id = "camConfigPort" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigUser")[0].id = "camConfigUser" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigPass")[0].id = "camConfigPass" + i;
 
         document.getElementById("camConfigName" + i).innerHTML = ATEMCameras[i].name;
         document.getElementById("camConfigType" + i).value = ATEMCameras[i].type;
         document.getElementById("camConfigTransport" + i).value = ATEMCameras[i].transport;
-        onCamTypeChange(document.getElementById("camConfigType" + i));  // apply ONVIF->TCP rule
         document.getElementById("camConfigIP" + i).value = ATEMCameras[i].ip;
         document.getElementById("camConfigPort" + i).value = ATEMCameras[i].port;
+        document.getElementById("camConfigUser" + i).value = ATEMCameras[i].user || "";
+        // Password is never echoed back; leave blank and only overwrite on save if typed.
+        onCamTypeChange(document.getElementById("camConfigType" + i));  // ONVIF->TCP + show/hide creds
       }
       template.remove();
     }
@@ -355,12 +361,18 @@
       var transport = document.getElementById(sel.id.replace("Type", "Transport"));
       if (!transport) return;
       var udpOpt = transport.querySelector('option[value="0"]');
-      if (sel.value == "1") {          // ONVIF -> TCP only
+      var onvif = sel.value == "1";
+      if (onvif) {                     // ONVIF -> TCP only
         transport.value = "1";
         if (udpOpt) udpOpt.disabled = true;
       } else {                         // VISCA -> UDP or TCP
         if (udpOpt) udpOpt.disabled = false;
       }
+      // ONVIF cameras need credentials; VISCA has no auth, so hide the fields.
+      var user = document.getElementById(sel.id.replace("Type", "User"));
+      var pass = document.getElementById(sel.id.replace("Type", "Pass"));
+      if (user) user.parentNode.style.display = onvif ? "" : "none";
+      if (pass) pass.parentNode.style.display = onvif ? "" : "none";
     }
 
     function getLogData() {
@@ -702,6 +714,15 @@
                     <div class="col-md-2 col-6 px-0">
                       <input name="camConfigPort" type="text" class="form-control" id="camConfigPort" placeholder="52381" value=""
                         minlength="1" maxlength="5" size="5" pattern="^(\d{1,5})$">
+                    </div>
+                    <!-- ONVIF-only credentials; shown/hidden by onCamTypeChange -->
+                    <div class="col-md-3 col-6 px-0">
+                      <input name="camConfigUser" type="text" class="form-control" id="camConfigUser" placeholder="onvif user"
+                        value="" maxlength="23" autocomplete="off">
+                    </div>
+                    <div class="col-md-3 col-6 px-0">
+                      <input name="camConfigPass" type="password" class="form-control" id="camConfigPass" placeholder="onvif password (leave blank to keep)"
+                        value="" maxlength="23" autocomplete="off">
                     </div>
                   </div>
                   <!-- End Camera Config Template-->
