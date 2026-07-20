@@ -75,11 +75,12 @@ static void configureSimulatorTargets(const char info[]) {
     settings.cameraType[i]      = types[i];
     settings.cameraTransport[i] = transports[i];
     settings.cameraHeaders[i]   = headers[i];
-    if (types[i] == CAM_ONVIF) {   // match the sim's ONVIF_USER/ONVIF_PASS
-      strlcpy(settings.cameraUser[i], "admin",     sizeof(settings.cameraUser[i]));
-      strlcpy(settings.cameraPass[i], "churchcam", sizeof(settings.cameraPass[i]));
-    }
   }
+  // Camera 3 (index 2) requires auth -- match the sim's ONVIF_USER/ONVIF_PASS.
+  // Camera 4 (index 3) is left blank on purpose: the sim runs it anonymously, so
+  // the firmware sends no WS-Security header. Exercises both ONVIF auth paths.
+  strlcpy(settings.cameraUser[2], "admin",     sizeof(settings.cameraUser[2]));
+  strlcpy(settings.cameraPass[2], "churchcam", sizeof(settings.cameraPass[2]));
 }
 
 /**

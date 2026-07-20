@@ -176,10 +176,13 @@ static void onvifBuildSecurity(int cam) {
   snprintf(securityBuf, sizeof securityBuf, securityFormat, user, digestB64, nonceB64, created);
 }
 
-// Compose one full HTTP request (headers + signed SOAP envelope) into messageBuf
-// for the given camera and pre-formatted action body.
+// Compose one full HTTP request (headers + SOAP envelope) into messageBuf for the
+// given camera and pre-formatted action body. With no username configured the
+// request is sent anonymously (empty WS-Security header) -- many ONVIF cameras
+// permit unauthenticated access, and that mirrors how generic clients probe.
 static void onvifBuildMessage(int cam, const char* body) {
-  onvifBuildSecurity(cam);
+  if ( settings.cameraUser[cam][0] == '\0' ) securityBuf[0] = '\0';   // anonymous
+  else                                        onvifBuildSecurity(cam);
   snprintf(soapBuf, sizeof soapBuf, envelopeFormat, securityBuf, body);
   snprintf(messageBuf, sizeof messageBuf, httpFormat,
     settings.cameraIP[cam][0], settings.cameraIP[cam][1],

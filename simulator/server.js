@@ -40,10 +40,12 @@ const LAN_IP = (() => {
   return '127.0.0.1';
 })();
 
-// ONVIF WS-Security credentials the two ONVIF cameras expect. The firmware
-// preloads these same values for the sim cameras (configureSimulatorTargets in
-// Network.cpp), so auth passes out of the box; change one side to see the sim
-// reject the request the way a real camera would.
+// ONVIF WS-Security credentials Camera 3 expects. The firmware preloads these for
+// that sim camera (configureSimulatorTargets in Network.cpp) so auth passes out of
+// the box; change one side to see the sim reject the request like a real camera.
+// Camera 4 has NO credentials -- it models a camera that permits anonymous access
+// (very common on cheap ONVIF cameras), so it accepts requests with no security
+// header at all. The firmware leaves Camera 4's user/pass blank -> anonymous.
 const ONVIF_USER = 'admin';
 const ONVIF_PASS = 'churchcam';
 
@@ -52,7 +54,7 @@ const VIEWS = [
   { id: 0, name: 'Camera 1', proto: 'VISCA', transport: 'udp', port: 52381, framed: true },
   { id: 1, name: 'Camera 2', proto: 'VISCA', transport: 'tcp', port: 52382, framed: false },
   { id: 2, name: 'Camera 3', proto: 'ONVIF', transport: 'http', port: 8083, user: ONVIF_USER, pass: ONVIF_PASS },
-  { id: 3, name: 'Camera 4', proto: 'ONVIF', transport: 'http', port: 8084, user: ONVIF_USER, pass: ONVIF_PASS },
+  { id: 3, name: 'Camera 4', proto: 'ONVIF', transport: 'http', port: 8084 },   // anonymous (no auth)
 ];
 
 // ---------------------------------------------------------------------------
@@ -323,7 +325,9 @@ for (const view of VIEWS.filter((v) => v.transport === 'http')) {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
-      const auth = validateWsse(body, view);
+      // A camera with no configured user permits anonymous access -- accept any
+      // request. One that requires auth validates the WS-Security token.
+      const auth = view.user ? validateWsse(body, view) : { ok: true };
       if (!auth.ok) {
         logCmd(view.id, `ONVIF auth REJECTED: ${auth.reason}`);
         res.writeHead(400, { 'Content-Type': 'application/soap+xml; charset=utf-8' });
@@ -335,7 +339,7 @@ for (const view of VIEWS.filter((v) => v.transport === 'http')) {
       res.end(ONVIF_RESPONSE);
     });
   });
-  srv.listen(view.port, () => console.log(`cam${view.id + 1}: ONVIF  HTTP :${view.port} (user=${view.user})`));
+  srv.listen(view.port, () => console.log(`cam${view.id + 1}: ONVIF  HTTP :${view.port} (${view.user ? 'user=' + view.user : 'anonymous'})`));
 }
 
 // ---------------------------------------------------------------------------
