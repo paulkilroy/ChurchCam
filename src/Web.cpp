@@ -36,6 +36,8 @@ esp_err_t handleLogData(PsychicRequest* request, PsychicResponse* response);
 
 String RestartMsg = "";
 bool Restart = false;
+volatile bool g_otaActive = false;      // set while an OTA upload is streaming (display OTA screen)
+volatile uint32_t g_otaBytes = 0;
 
 String processor(const String& var) {
   String serverVars = "";
@@ -277,9 +279,11 @@ static esp_err_t otaUploadChunk(PsychicRequest* request, const String& filename,
                                 uint64_t index, uint8_t* data, size_t len, bool last) {
   if ( index == 0 ) {
     Serial.printf("UPDATE: %s\n", filename.c_str());
+    g_otaActive = true;   // the display takes over with the "do not power off" screen
     if ( !Update.begin(UPDATE_SIZE_UNKNOWN) ) Update.printError(Serial);
   }
   if ( len && Update.write(data, len) != len ) Update.printError(Serial);
+  g_otaBytes = index + len;
   if ( last ) {
     if ( Update.end(true) ) Serial.printf("Update Success: %llu\n", index + len);
     else Update.printError(Serial);

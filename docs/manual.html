@@ -1,0 +1,469 @@
+<title>ChurchCam — Operator &amp; Setup Manual</title>
+<style>
+  :root{
+    --bg:#f7f8fa;--surface:#ffffff;--sunk:#f0f2f5;--edge:#e2e6ec;--edge2:#d3d9e2;
+    --ink:#1a1e26;--muted:#5b6472;--faint:#8a93a2;
+    --accent:#12a150;--accent-ink:#0c7d3d;--air:#e0231a;--amber:#d99400;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    /* device screen colours */
+    --sw:#f4f6f8;--sg:#25e05a;--sr:#ff2b23;--sa:#ffd21e;--sd:#3a4150;--st:#20242e;--sgy:#6b7280;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0c0e12;--surface:#14171d;--sunk:#0f1218;--edge:#242a33;--edge2:#2f3742;
+    --ink:#e8ebf0;--muted:#9aa2b1;--faint:#6b7482;--accent:#2ee06a;--accent-ink:#33d17a;--amber:#ffcb30;
+  }}
+  :root[data-theme="dark"]{--bg:#0c0e12;--surface:#14171d;--sunk:#0f1218;--edge:#242a33;--edge2:#2f3742;--ink:#e8ebf0;--muted:#9aa2b1;--faint:#6b7482;--accent:#2ee06a;--accent-ink:#33d17a;--amber:#ffcb30;}
+  :root[data-theme="light"]{--bg:#f7f8fa;--surface:#ffffff;--sunk:#f0f2f5;--edge:#e2e6ec;--edge2:#d3d9e2;--ink:#1a1e26;--muted:#5b6472;--faint:#8a93a2;--accent:#12a150;--accent-ink:#0c7d3d;--amber:#d99400;}
+
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;font-size:16px}
+  .wrap{max-width:900px;margin:0 auto;padding:clamp(24px,4vw,60px) clamp(18px,4vw,36px) 100px}
+  a{color:var(--accent-ink)}
+
+  header.cover{border-bottom:1px solid var(--edge);padding-bottom:30px;margin-bottom:14px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--accent-ink);margin:0 0 14px}
+  h1{font-size:clamp(30px,5vw,46px);line-height:1.05;letter-spacing:-.02em;margin:0 0 14px;font-weight:720;text-wrap:balance}
+  .cover p{color:var(--muted);max-width:64ch;font-size:17px;margin:0}
+  .cover .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;font-family:var(--mono);font-size:12px}
+  .cover .meta span{background:var(--sunk);border:1px solid var(--edge);border-radius:999px;padding:5px 12px;color:var(--muted)}
+
+  nav.toc{background:var(--sunk);border:1px solid var(--edge);border-radius:14px;padding:18px 22px;margin:30px 0}
+  nav.toc h2{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+  nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:30px}
+  @media(max-width:560px){nav.toc ol{columns:1}}
+  nav.toc li{margin:5px 0}
+  nav.toc a{text-decoration:none;color:var(--ink)}
+  nav.toc a:hover{color:var(--accent-ink)}
+
+  section{margin-top:56px;scroll-margin-top:20px}
+  h2.sec{font-size:26px;letter-spacing:-.01em;margin:0 0 6px;font-weight:680;display:flex;align-items:baseline;gap:12px}
+  h2.sec .num{font-family:var(--mono);font-size:15px;color:var(--accent-ink);font-weight:600}
+  .sec-intro{color:var(--muted);margin:0 0 24px;max-width:66ch}
+  h3{font-size:18px;margin:30px 0 8px;font-weight:640}
+  p{margin:0 0 14px} p:last-child{margin-bottom:0}
+  strong{font-weight:640}
+  code{font-family:var(--mono);font-size:.86em;background:var(--sunk);border:1px solid var(--edge);border-radius:5px;padding:1px 6px}
+
+  .card{background:var(--surface);border:1px solid var(--edge);border-radius:14px;padding:22px 24px;margin:18px 0}
+  .callout{border-left:3px solid var(--accent);background:var(--sunk);border-radius:0 10px 10px 0;padding:14px 18px;margin:18px 0}
+  .callout.warn{border-left-color:var(--amber)} .callout.tip{border-left-color:var(--accent)}
+  .callout p{margin:0} .callout .h{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);display:block;margin-bottom:5px}
+
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--edge);vertical-align:top}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  td code{white-space:nowrap}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin-right:7px}
+
+  /* device screen rendering */
+  .bezel{background:linear-gradient(#0c0d10,#070809);border:1px solid #2b313c;border-radius:14px;padding:14px;box-shadow:0 18px 44px -26px #0009}
+  .screen-wrap{position:relative;width:100%;aspect-ratio:320/240;border-radius:4px;overflow:hidden;outline:1px solid #000;box-shadow:inset 0 0 0 1px #ffffff10,inset 0 0 34px #0007}
+  .screen{position:absolute;top:0;left:0;width:320px;height:240px;transform-origin:0 0;background:#000;color:var(--sw);font-family:var(--mono)}
+  .screen *{position:absolute;font-family:var(--mono);letter-spacing:.02em;line-height:1}
+  .strip-wrap{position:relative;width:100%;aspect-ratio:320/26;border-radius:3px;overflow:hidden;background:#000}
+  .strip{position:absolute;inset:0;width:320px;height:26px;transform-origin:0 0;font-family:var(--mono)}
+  .strip *{position:absolute;font-family:var(--mono);line-height:1;letter-spacing:.02em}
+  .cap{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin:10px 2px 0;text-align:center}
+
+  .annot{display:grid;grid-template-columns:1.3fr 1fr;gap:26px;align-items:center}
+  @media(max-width:680px){.annot{grid-template-columns:1fr}}
+  /* plain screen+content grid that does NOT restyle list items (for .steps) */
+  .split{display:grid;grid-template-columns:1.3fr 1fr;gap:26px;align-items:center}
+  @media(max-width:680px){.split{grid-template-columns:1fr}}
+  .annot ol{margin:0;padding:0;list-style:none;counter-reset:a}
+  .annot li{position:relative;padding:9px 0 9px 34px;border-bottom:1px solid var(--edge);font-size:14px}
+  .annot li:last-child{border-bottom:0}
+  .annot li::before{counter-increment:a;content:counter(a);position:absolute;left:0;top:8px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-family:var(--mono);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .annot li b{color:var(--ink)}
+
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:640px){.twocol{grid-template-columns:1fr}}
+  .mini h4{font-size:14px;margin:0 0 8px;font-weight:640}
+  /* numbered steps — same green circle as the callouts, for one consistent style */
+  .steps{counter-reset:s;padding:0;list-style:none;margin:0}
+  .steps li{position:relative;padding:2px 0 16px 34px}
+  .steps li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:0;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-family:var(--mono);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .steps li b{display:block;margin-bottom:2px}
+
+  /* config-page recreation — mirrors the real Bootstrap interface (config.html) */
+  .browser{border:1px solid var(--edge2);border-radius:12px;overflow:hidden;background:var(--surface);box-shadow:0 16px 44px -26px #0008;margin:20px 0}
+  .browser .chrome{display:flex;align-items:center;gap:10px;background:var(--sunk);border-bottom:1px solid var(--edge);padding:9px 12px}
+  .browser .dots{display:flex;gap:5px}.browser .dots i{width:10px;height:10px;border-radius:50%;background:var(--edge2)}
+  .browser .addr{flex:1;background:var(--surface);border:1px solid var(--edge);border-radius:6px;padding:4px 10px;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .browser .body{padding:18px 20px}
+  .apph{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--edge);margin-bottom:16px}
+  .apph .logo{width:30px;height:30px;flex:none;color:var(--ink)}
+  .apph .t{font-size:19px;font-weight:700;line-height:1.15}.apph .s{font-size:12px;color:var(--muted);font-style:italic}
+  .bgroup{display:flex;justify-content:center;margin-bottom:18px}
+  .bgroup .g{display:inline-flex;border-radius:8px;overflow:hidden;border:1px solid #3b82f6}
+  .bgroup span{padding:8px 18px;font-size:13.5px;font-weight:600;color:#3b82f6;border-right:1px solid #3b82f6}
+  .bgroup span:last-child{border-right:0} .bgroup span.on{background:#3b82f6;color:#fff}
+  .navtab{display:inline-block;background:#3b82f6;color:#fff;font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:6px 6px 0 0;margin-top:14px}
+  .fbox{border:1px solid #3b82f6;border-radius:0 8px 8px 8px;padding:14px}
+  .flt{position:relative;border:1px solid var(--edge2);border-radius:7px;padding:19px 12px 6px;margin-bottom:9px;background:var(--surface)}
+  .flt label{position:absolute;top:6px;left:12px;font-size:10px;color:var(--muted)}
+  .flt .v{font-family:var(--mono);font-size:13.5px;color:var(--ink)}
+  .fsw{display:flex;align-items:center;gap:9px;margin:12px 2px;font-size:13.5px;color:var(--ink)}
+  .fsw i{width:34px;height:19px;border-radius:10px;background:var(--edge2);position:relative;flex:none}
+  .fsw i::after{content:"";position:absolute;left:2px;top:2px;width:15px;height:15px;border-radius:50%;background:#fff}
+  .igr{display:flex;align-items:stretch;border:1px solid var(--edge2);border-radius:8px;overflow:hidden;margin-bottom:7px;font-size:12.5px}
+  .igr .ad{background:var(--sunk);padding:9px 11px;font-weight:700;border-right:1px solid var(--edge2);white-space:nowrap;flex:none;display:flex;align-items:center}
+  .igr .c{padding:9px 10px;border-right:1px solid var(--edge2);font-family:var(--mono);display:flex;align-items:center;min-width:0}
+  .igr .c:last-child{border-right:0} .igr .c.ip{flex:1}
+  .igr .sel{position:relative;padding-right:22px;color:var(--ink)}.igr .sel::after{content:"▾";position:absolute;right:8px;color:var(--faint);font-size:11px}
+  .bsuccess{display:block;text-align:center;background:#16a34a;color:#fff;border-radius:8px;padding:10px;font-weight:600;font-size:13.5px;margin:12px 0}
+  .bprimary{display:inline-block;background:#3b82f6;color:#fff;border-radius:8px;padding:11px 22px;font-weight:600;font-size:14px}
+  .tbl{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;border:1px solid var(--edge);border-radius:8px;overflow:hidden}
+  .tbl th{padding:8px 11px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.03em;color:#fff}
+  .tbl thead.dk th{background:#1f2937}.tbl thead.pr th{background:#3b82f6}
+  .tbl td{padding:8px 11px;border-top:1px solid var(--edge);vertical-align:middle}
+  .tbl td.rowlbl{font-weight:600}.tbl td.rowlbl .rd{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:middle}
+  .r-ok{background:rgba(34,197,94,.13)}.r-bad{background:rgba(224,35,26,.12)}.r-off{background:var(--sunk)}
+  .up{background:#22c55e}.down{background:var(--air)}.off{background:var(--edge2)}.warn{background:var(--amber)}
+
+  .theme-btn{position:fixed;top:14px;right:14px;z-index:9;background:var(--surface);border:1px solid var(--edge2);color:var(--muted);border-radius:8px;padding:7px 11px;font-family:var(--mono);font-size:12px;cursor:pointer}
+  footer{margin-top:70px;border-top:1px solid var(--edge);padding-top:22px;color:var(--faint);font-size:13px}
+</style>
+
+<button class="theme-btn" onclick="var r=document.documentElement,d=(r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'));r.setAttribute('data-theme',d==='dark'?'light':'dark')">◐ theme</button>
+
+<div class="wrap">
+  <header class="cover">
+    <p class="kicker">ChurchCam · Olimex ESP32-PoE PTZ Controller</p>
+    <h1>Operator &amp; Setup Manual</h1>
+    <p>ChurchCam is a joystick controller for pan/tilt/zoom cameras. It follows your ATEM switcher's <strong>preview</strong> bus — so you always drive whatever camera is cued next — and speaks both <strong>VISCA</strong> and <strong>ONVIF</strong> over Ethernet or Wi-Fi. This guide covers the on-screen display, the joystick and buttons, first-time setup, and the web configuration page.</p>
+    <div class="meta"><span>320×240 display</span><span>3-axis joystick</span><span>override + 2 preset buttons</span><span>VISCA · ONVIF</span><span>web config</span></div>
+  </header>
+
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#glance">The screen at a glance</a></li>
+      <li><a href="#controls">Joystick &amp; buttons</a></li>
+      <li><a href="#reading">Reading the display</a></li>
+      <li><a href="#driving">Driving cameras &amp; presets</a></li>
+      <li><a href="#feedback">Button feedback &amp; saving</a></li>
+      <li><a href="#setup">First-time setup</a></li>
+      <li><a href="#config">The configuration page</a></li>
+      <li><a href="#states">Screen states &amp; troubleshooting</a></li>
+      <li><a href="#reference">Quick reference</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 GLANCE -->
+  <section id="glance">
+    <h2 class="sec"><span class="num">1</span>The screen at a glance</h2>
+    <p class="sec-intro">The main "console" screen shows everything you need while driving: which camera you're on and whether it's live, where the joystick is, the whole switcher bus, and whether the device is talking.</p>
+    <div class="bezel"><div class="screen-wrap"><div class="screen" id="console"></div></div></div>
+    <p class="cap">The console — a full breakdown of every region is in <a href="#reading">Reading the display</a>.</p>
+  </section>
+
+  <!-- 2 CONTROLS -->
+  <section id="controls">
+    <h2 class="sec"><span class="num">2</span>Joystick &amp; buttons</h2>
+    <p class="sec-intro">Three physical controls do everything. The joystick drives the camera; the three buttons handle live override and presets.</p>
+    <table>
+      <tr><th>Control</th><th>Action</th></tr>
+      <tr><td><b>Joystick — left / right</b></td><td>Pan the camera</td></tr>
+      <tr><td><b>Joystick — up / down</b></td><td>Tilt the camera</td></tr>
+      <tr><td><b>Joystick — zoom axis</b></td><td>Zoom in / out</td></tr>
+      <tr><td><b>OVERRIDE button</b> (hold)</td><td>Drive the <b>Program</b> (live) camera instead of Preview — the tally box turns red. Also the "shift key" for saving presets.</td></tr>
+      <tr><td><b>PRESET 1 / 2 — tap</b></td><td><b>Recall</b> that preset (camera moves to the saved position)</td></tr>
+      <tr><td><b>OVERRIDE + PRESET 1/2</b></td><td><b>Save</b> the current position to that preset</td></tr>
+    </table>
+    <div class="callout tip"><span class="h">Rule of thumb</span><p>A quick <b>tap</b> on a preset button <b>recalls</b>. To <b>save</b>, hold <b>OVERRIDE</b> and tap the preset button — you'll get a full-screen "PRESET SAVED" confirmation.</p></div>
+  </section>
+
+  <!-- 3 READING -->
+  <section id="reading">
+    <h2 class="sec"><span class="num">3</span>Reading the display</h2>
+    <p class="sec-intro">Every colour and pill on the screen means something specific. Here's the whole vocabulary.</p>
+
+    <h3>The header</h3>
+    <div class="annot" style="align-items:start">
+      <div class="bezel"><div class="strip-wrap"><div class="strip" id="hdr"></div></div></div>
+      <ol>
+        <li><b>Signal</b> — Wi-Fi strength bars, or a wired icon on Ethernet.</li>
+        <li><b>Host &amp; IP</b> — the device's hostname, address, and Wi-Fi signal (dBm).</li>
+        <li><b>ATEM</b> — green pill when the switcher is connected; amber <b>NO ATEM</b> when it isn't.</li>
+        <li><b>ON AIR</b> — big and red when the switcher is <b>livestreaming</b>; dim <b>OFF AIR</b> otherwise — <em>not</em> the same as a camera being on Program.</li>
+      </ol>
+    </div>
+
+    <h3>The whole console</h3>
+    <div class="annot">
+      <div class="bezel"><div class="screen-wrap"><div class="screen" id="console2"></div></div></div>
+      <ol>
+        <li><b>Status header</b> — signal, hostname/IP, ATEM link, and the big ON&nbsp;AIR / OFF&nbsp;AIR streaming indicator.</li>
+        <li><b>Tally box</b> — the camera you're driving; the frame is <span style="color:var(--air)">red on Program</span>, <span style="color:var(--accent-ink)">green on Preview</span>.</li>
+        <li><b>Radar</b> — live pan/tilt position (dot) and zoom (right rail).</li>
+        <li><b>Camera bus</b> — all 8 inputs at a glance, with tally and connection state.</li>
+        <li><b>TX graph</b> — commands the device is sending, per second.</li>
+      </ol>
+    </div>
+
+    <h3>Tally — Program vs Preview</h3>
+    <p>The tally box frame tells you, at a glance, whether the camera you're driving is live:</p>
+    <table>
+      <tr><th>Frame</th><th>Meaning</th></tr>
+      <tr><td><span class="swatch" style="background:var(--air)"></span><b>PROGRAM</b> (red)</td><td>This camera is <b>live on air</b>. Move with care.</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sg)"></span><b>PREVIEW</b> (green)</td><td>This camera is <b>cued next</b>. Safe to reframe.</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sd)"></span><b>OFF</b> (grey)</td><td>Not on either bus.</td></tr>
+    </table>
+
+    <h3>The camera bus strip</h3>
+    <p>All eight inputs, always visible. Each tile shows the input number, its tally, and whether a camera is actually reachable there:</p>
+    <table>
+      <tr><th>Tile</th><th>State</th></tr>
+      <tr><td><span class="swatch" style="background:var(--air)"></span>red · <code>PRG</code></td><td>On Program (live)</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sg)"></span>green · <code>PVW</code></td><td>On Preview (next)</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sgy)"></span>grey</td><td>Connected, reachable</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sa)"></span>amber · <code>!</code></td><td>Configured but <b>not responding</b></td></tr>
+      <tr><td><span class="swatch" style="background:var(--sd)"></span>dim</td><td>No camera configured on this input</td></tr>
+    </table>
+    <p>A white underline marks the tile you're currently driving.</p>
+
+    <h3>Radar &amp; TX graph</h3>
+    <p>The <b>radar</b> crosshair shows live pan/tilt as a moving dot, with zoom on the right rail; both turn red when you're on a Program camera. The <b>TX graph</b> along the bottom is a running count of commands the device sends each second — a quiet heartbeat that lets you see it's actually talking to the cameras.</p>
+  </section>
+
+  <!-- 4 DRIVING -->
+  <section id="driving">
+    <h2 class="sec"><span class="num">4</span>Driving cameras &amp; presets</h2>
+    <p class="sec-intro">You never pick a camera number by hand — the controller follows the switcher.</p>
+    <h3>Which camera you're driving</h3>
+    <p>By default the controller drives whatever camera is on the ATEM's <b>Preview</b> bus. Cue a camera to preview on the switcher, and the joystick moves that camera — the tally box shows it green (<b>PREVIEW</b>).</p>
+    <p>Need to nudge the shot that's <b>live</b>? <b>Hold OVERRIDE</b> — now you're driving the <b>Program</b> camera, and the tally box (and radar) turn red so you never forget the shot is on air. Release to go back to driving Preview.</p>
+    <h3>Presets</h3>
+    <ul class="steps">
+      <li><b>Recall a preset</b> — tap PRESET 1 or 2. The camera moves to the saved shot; the header flashes <code>PRESET n RECALL</code>.</li>
+      <li><b>Save a preset</b> — frame the shot, then hold OVERRIDE and tap PRESET 1 or 2. A full-screen confirmation shows the camera and the position you saved.</li>
+    </ul>
+  </section>
+
+  <!-- 5 FEEDBACK -->
+  <section id="feedback">
+    <h2 class="sec"><span class="num">5</span>Button feedback &amp; saving</h2>
+    <p class="sec-intro">Every button press gets visible feedback so you know the device saw it.</p>
+    <div class="twocol">
+      <div class="mini"><h4>Override held</h4><div class="bezel"><div class="strip-wrap"><div class="strip" id="fOvr"></div></div></div></div>
+      <div class="mini"><h4>Preset recalled (tap)</h4><div class="bezel"><div class="strip-wrap"><div class="strip" id="fRec"></div></div></div></div>
+    </div>
+    <h3 style="margin-top:26px">Saving a preset — the confirmation</h3>
+    <p>Holding OVERRIDE and tapping a preset <b>saves</b> the shot and takes over the whole screen for a couple of seconds. The joystick keeps working underneath, then the console returns.</p>
+    <div class="annot">
+      <div class="bezel"><div class="screen-wrap"><div class="screen" id="save"></div></div></div>
+      <ol>
+        <li><b>Which preset</b> — the slot you just saved to.</li>
+        <li><b>Camera</b> — the number and name it was saved for.</li>
+        <li><b>Position</b> — the pan / tilt / zoom you stored, shown as bars.</li>
+        <li><b>Recall</b> — tap the same button later to return to this shot.</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 6 SETUP -->
+  <section id="setup">
+    <h2 class="sec"><span class="num">6</span>First-time setup</h2>
+    <p class="sec-intro">Out of the box (or after an erase) the device has no network, so it hosts its own hotspot for configuration.</p>
+    <div class="split">
+      <div class="bezel"><div class="screen-wrap"><div class="screen" id="scrSetup"></div></div></div>
+      <ol class="steps" style="counter-reset:s">
+        <li><b>Join its Wi-Fi</b> — on your phone or laptop, connect to the <code>ptz-setup</code> network.</li>
+        <li><b>Open the config page</b> — browse to <code>192.168.4.1</code> (shown on screen).</li>
+        <li><b>Enter your Wi-Fi</b>, the ATEM's IP, and your cameras — then Save. The device reboots and joins your network.</li>
+      </ol>
+    </div>
+    <div class="callout"><span class="h">After setup</span><p>Once it's on your network the screen shows the device's real IP and hostname (<code>churchcam</code> by default) — browse to that hostname or IP anytime to change settings.</p></div>
+  </section>
+
+  <!-- 7 CONFIG -->
+  <section id="config">
+    <h2 class="sec"><span class="num">7</span>The configuration page</h2>
+    <p class="sec-intro">The web page (served by the device) has four tabs: <b>Status</b>, <b>Config</b>, <b>Logs</b>, and <b>Firmware</b>. Browse to the device's hostname (<code>churchcam.local</code>) or IP to open it.</p>
+
+    <div class="browser">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="addr">http://churchcam.local</div></div>
+      <div class="body">
+        <div class="apph"><svg class="logo" viewBox="0 0 16 16" fill="currentColor"><path d="M10 2a2 2 0 0 1-1.5 1.937v5.087c.863.083 1.5.377 1.5.726 0 .414-.895.75-2 .75s-2-.336-2-.75c0-.35.637-.643 1.5-.726V3.937A2 2 0 1 1 10 2z"/><path d="M0 9.665v1.717a1 1 0 0 0 .553.894l6.553 3.277a2 2 0 0 0 1.788 0l6.553-3.277a1 1 0 0 0 .553-.894V9.665c0-.1-.06-.19-.152-.23L9.5 6.715v.993l5.227 2.178a.125.125 0 0 1 .001.23l-5.94 2.546a2 2 0 0 1-1.576 0l-5.94-2.546a.125.125 0 0 1 .001-.23L6.5 7.708l-.013-.988L.152 9.435a.25.25 0 0 0-.152.23z"/></svg><div><div class="t">Church Cam Controller</div><div class="s">PTZ made EZ</div></div></div>
+        <div class="bgroup"><div class="g"><span>Status</span><span class="on">Config</span><span>Logs</span><span>Firmware</span></div></div>
+        <div class="navtab">Network Config</div>
+        <div class="fbox">
+          <div class="flt"><label>Network Name (SSID)</label><div class="v">KilroyNetwork</div></div>
+          <div class="flt"><label>Network Password</label><div class="v">••••••••••</div></div>
+          <div class="fsw"><i></i> Static IP Address?</div>
+          <div class="flt"><label>ATEM Mini Pro IP</label><div class="v">10.0.4.40</div></div>
+          <div style="height:4px"></div>
+          <div class="igr"><div class="ad">CAM1 [ATEM In1]</div><div class="c sel">VISCA</div><div class="c sel">UDP</div><div class="c ip">10.0.4.62</div><div class="c">52381</div></div>
+          <div class="igr"><div class="ad">CAM2 [ATEM In2]</div><div class="c sel">VISCA</div><div class="c sel">TCP</div><div class="c ip">10.0.4.63</div><div class="c">52382</div></div>
+          <div class="igr"><div class="ad">CAM3 [ATEM In3]</div><div class="c sel">ONVIF</div><div class="c sel">TCP</div><div class="c ip">10.0.4.64</div><div class="c">8083</div></div>
+          <div class="igr"><div class="ad">CAM4 [ATEM In4]</div><div class="c sel">ONVIF</div><div class="c sel">TCP</div><div class="c ip">10.0.4.65</div><div class="c">8084</div></div>
+          <div class="bsuccess">Discover Cameras</div>
+        </div>
+        <div style="margin-top:16px"><span class="bprimary">Submit</span></div>
+      </div>
+    </div>
+    <p class="cap">The <b>Config</b> tab, matching the real page: <code>form-floating</code> network fields and one <code>input-group</code> row per camera (name · VISCA/ONVIF · UDP/TCP · IP · port).</p>
+
+    <h3>Status</h3>
+    <p>A live read-out of the network interfaces (Ethernet / Wi-Fi / Hotspot with their IPs), the ATEM switcher, and every camera's reachability — the same up / down / not-configured states you see on the device's camera strip.</p>
+    <div class="browser">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="addr">http://churchcam.local</div></div>
+      <div class="body">
+        <div class="apph"><svg class="logo" viewBox="0 0 16 16" fill="currentColor"><path d="M10 2a2 2 0 0 1-1.5 1.937v5.087c.863.083 1.5.377 1.5.726 0 .414-.895.75-2 .75s-2-.336-2-.75c0-.35.637-.643 1.5-.726V3.937A2 2 0 1 1 10 2z"/></svg><div><div class="t">Church Cam Controller</div><div class="s">PTZ made EZ</div></div></div>
+        <div class="bgroup"><div class="g"><span class="on">Status</span><span>Config</span><span>Logs</span><span>Firmware</span></div></div>
+        <table class="tbl"><thead class="dk"><tr><th>Network</th><th>IP</th><th>SSID</th><th>Info</th></tr></thead><tbody>
+          <tr><td class="rowlbl r-ok"><span class="rd up"></span>Ethernet</td><td>10.0.4.40</td><td>—</td><td>—</td></tr>
+          <tr><td class="rowlbl r-off"><span class="rd off"></span>WiFi</td><td>—</td><td>—</td><td>off</td></tr>
+          <tr><td class="rowlbl r-off"><span class="rd off"></span>Hotspot</td><td>—</td><td>ptz-setup</td><td>off</td></tr>
+        </tbody></table>
+        <table class="tbl"><thead class="pr"><tr><th>Device</th><th>IP</th><th>Proto</th><th>Port</th></tr></thead><tbody>
+          <tr><td class="rowlbl r-ok"><span class="rd up"></span>ATEM Mini Pro</td><td>10.0.4.40</td><td>TCP</td><td>—</td></tr>
+          <tr><td class="rowlbl r-ok"><span class="rd up"></span>Camera 1</td><td>10.0.4.62</td><td>VISCA UDP</td><td>52381</td></tr>
+          <tr><td class="rowlbl r-ok"><span class="rd up"></span>Camera 2</td><td>10.0.4.63</td><td>VISCA TCP</td><td>52382</td></tr>
+          <tr><td class="rowlbl r-bad"><span class="rd warn"></span>Camera 3</td><td>10.0.4.64</td><td>ONVIF</td><td>8083</td></tr>
+        </tbody></table>
+      </div>
+    </div>
+    <p class="cap">The <b>Status</b> tab — the real two-table layout (Networks, then Device &amp; cameras) with colored rows for up / off / no-reply.</p>
+
+    <h3>Config</h3>
+    <div class="card">
+      <p><b>Network Config</b></p>
+      <table>
+        <tr><th>Field</th><th>What it's for</th></tr>
+        <tr><td>SSID / Network Password</td><td>Your Wi-Fi network (leave blank to stay on Ethernet only)</td></tr>
+        <tr><td>Static IP</td><td>Turn on to assign a fixed address instead of DHCP</td></tr>
+        <tr><td>Static IP / Subnet Mask / Gateway</td><td>The fixed address details, when Static IP is on</td></tr>
+      </table>
+      <p style="margin-top:18px"><b>Device Config</b></p>
+      <table>
+        <tr><th>Field</th><th>What it's for</th></tr>
+        <tr><td>ATEM Mini IP</td><td>The switcher's address, so tally &amp; camera selection follow it</td></tr>
+        <tr><td>Per camera — Type</td><td><b>VISCA</b> or <b>ONVIF</b> (the control protocol)</td></tr>
+        <tr><td>Per camera — Transport</td><td><b>UDP</b> or <b>TCP</b> (ONVIF is always TCP)</td></tr>
+        <tr><td>Per camera — IP &amp; Port</td><td>Where to reach that camera</td></tr>
+      </table>
+    </div>
+    <div class="callout tip"><span class="h">Discover Cameras</span><p>Rather than typing addresses, hit <b>Discover Cameras</b> — the device probes the network (VISCA broadcast + ONVIF discovery) and lists what it finds so you can assign each to an input.</p></div>
+
+    <h3>Logs</h3>
+    <p>A live log with Info / Debug / Warn / Error filters — handy when a camera isn't responding and you want to see what the device is sending.</p>
+
+    <h3>Firmware</h3>
+    <p>Upload a new firmware file to update the device over the air. While it writes, the device screen shows a full-screen progress bar and a <b>DO NOT POWER OFF</b> warning, then reboots into the new version.</p>
+  </section>
+
+  <!-- 8 STATES -->
+  <section id="states">
+    <h2 class="sec"><span class="num">8</span>Screen states &amp; troubleshooting</h2>
+    <p class="sec-intro">When something's not normal, the screen changes entirely — it tells you what's wrong instead of showing a broken console.</p>
+    <div class="twocol">
+      <div class="mini"><h4>Connecting / reconnecting</h4><div class="bezel"><div class="screen-wrap"><div class="screen" id="sConn"></div></div></div>
+        <p style="font-size:13.5px;color:var(--muted);margin-top:10px">Waiting for the network. If it says <em>Reconnecting</em>, the link dropped and it's retrying — restart the device if you changed Wi-Fi settings.</p></div>
+      <div class="mini"><h4>No ATEM</h4><div class="bezel"><div class="screen-wrap"><div class="screen" id="sNoAtem"></div></div></div>
+        <p style="font-size:13.5px;color:var(--muted);margin-top:10px">The switcher is unreachable. You can still drive a camera directly, but there's no tally. Check the ATEM IP in Config.</p></div>
+    </div>
+    <table style="margin-top:24px">
+      <tr><th>You see…</th><th>It means</th><th>Do</th></tr>
+      <tr><td><span class="swatch" style="background:var(--sa)"></span>SETUP MODE (yellow)</td><td>No network configured</td><td>Join <code>ptz-setup</code>, browse to <code>192.168.4.1</code></td></tr>
+      <tr><td><span class="swatch" style="background:var(--sa)"></span>Connecting / Reconnecting</td><td>No IP yet, or link dropped</td><td>Wait; restart if you changed Wi-Fi</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sa)"></span>NO ATEM pill</td><td>Switcher unreachable</td><td>Check the ATEM IP &amp; network</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sa)"></span>Amber <code>!</code> on a camera tile</td><td>Camera configured but not answering</td><td>Check the camera's IP/power/network</td></tr>
+      <tr><td><span class="swatch" style="background:var(--sd)"></span>NO CAMERA HERE</td><td>Preview is on an input with no camera (laptop, media)</td><td>Cue a camera input to control it</td></tr>
+    </table>
+  </section>
+
+  <!-- 9 REFERENCE -->
+  <section id="reference">
+    <h2 class="sec"><span class="num">9</span>Quick reference</h2>
+    <div class="twocol">
+      <div class="card">
+        <h4 style="margin-top:0">Buttons</h4>
+        <table>
+          <tr><td>Tap preset</td><td><b>Recall</b></td></tr>
+          <tr><td>Hold OVERRIDE + tap preset</td><td><b>Save</b></td></tr>
+          <tr><td>Hold OVERRIDE</td><td>Drive the <b>live</b> camera</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h4 style="margin-top:0">Colours</h4>
+        <table>
+          <tr><td><span class="swatch" style="background:var(--air)"></span>Red</td><td>Program / live / on air</td></tr>
+          <tr><td><span class="swatch" style="background:var(--sg)"></span>Green</td><td>Preview / connected / OK</td></tr>
+          <tr><td><span class="swatch" style="background:var(--sa)"></span>Amber</td><td>Attention — no reply / setup</td></tr>
+          <tr><td><span class="swatch" style="background:var(--sd)"></span>Dim</td><td>Not configured / inactive</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    ChurchCam · operator &amp; setup manual · device screens rendered at scale. Default hostname <code>churchcam</code>, setup network <code>ptz-setup</code>, setup address <code>192.168.4.1</code>.
+  </footer>
+</div>
+
+<script>
+  const S=id=>document.getElementById(id);
+  function add(s,o){const d=document.createElement('div');for(const k in o){if(k==='t')d.textContent=o[k];else d.style[k]=o[k];}s.appendChild(d);return d;}
+  function T(s,x,y,t,{size=10,color='var(--sw)',w=600,ls='.02em'}={}){return add(s,{left:x+'px',top:y+'px',whiteSpace:'nowrap',fontSize:size+'px',color,fontWeight:w,letterSpacing:ls,t});}
+  function TC(s,y,t,o={}){const e=T(s,0,y,t,o);e.style.left='0';e.style.right='0';e.style.width='320px';e.style.textAlign='center';return e;}
+  function R(s,x,y,w,h,c,r=0){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',background:c,borderRadius:r+'px'});}
+  function L(s,x,y,w,h,c,op=1){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',background:c,opacity:op});}
+  function O(s,x,y,w,h,c,r=0,bw=1){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',border:bw+'px solid '+c,borderRadius:r+'px'});}
+  function dot(s,x,y,c,d=6){return add(s,{left:x+'px',top:y+'px',width:d+'px',height:d+'px',borderRadius:'50%',background:c});}
+  function bars(s,x,y,n){for(let i=0;i<4;i++){const bh=(i+1)*2.4;R(s,x+i*3.5,y+10-bh,2.6,bh,i<n?'var(--sw)':'#2b3140');}}
+  function pillC(s,x,y,w,h,label,bg,fg,size){R(s,x,y,w,h,bg,3);add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size+'px',color:fg,fontWeight:800,whiteSpace:'nowrap',letterSpacing:'.04em',t:label});}
+  function head(s){bars(s,6,7,3);T(s,24,4,'churchcam',{size:9});T(s,24,14,'10.13.37.2 · -54dB',{size:8,color:'var(--sd)'});
+    O(s,170,6,42,14,'var(--sg)',3);dot(s,176,10,'var(--sg)',5);add(s,{left:'170px',top:'6px',width:'42px',height:'14px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'8px',color:'var(--sg)',fontWeight:800,t:'ATEM'});
+    R(s,218,2,96,21,'var(--sr)',3);dot(s,229,9,'#fff',7);add(s,{left:'218px',top:'2px',width:'96px',height:'21px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'13px',color:'#fff',fontWeight:800,letterSpacing:'.04em',paddingLeft:'14px',t:'ON AIR'});
+    L(s,0,25,320,1,'var(--sw)',.35);}
+  function radar(s,cx,cy,r,pan,tilt){O(s,cx-r,cy-r,2*r,2*r,'var(--sr)',r,2);O(s,cx-r*.5,cy-r*.5,r,r,'var(--st)',r,1);L(s,cx-r,cy,2*r,1,'var(--st)');L(s,cx,cy-r,1,2*r,'var(--st)');const dx=cx+pan*(r-6),dy=cy-tilt*(r-6);const d=dot(s,dx-5,dy-5,'var(--sr)',10);d.style.boxShadow='0 0 0 2px #000';}
+  function tallyBox(s){O(s,6,27,120,116,'var(--sr)',5,3);R(s,8,29,58,13,'var(--sr)');add(s,{left:'8px',top:'29px',width:'58px',height:'13px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'8px',color:'#fff',fontWeight:800,t:'PROGRAM'});
+    T(s,32,44,'1',{size:74,color:'var(--sw)',w:800});L(s,14,120,106,1,'#3a2a12');T(s,14,126,'CAM 1 · WIDE',{size:9,color:'var(--sw)',w:800});dot(s,14,137,'var(--sg)',5);T(s,24,135,'VISCA UDP',{size:8,color:'var(--sg)',w:700});}
+  function strip(s){T(s,6,155,'INPUTS',{size:8,color:'var(--sd)',w:700,ls:'.14em'});
+    const st=['program','preview','online','down','unset','unset','online','unset'];
+    st.forEach((k,i)=>{const tx=6+i*39,C={program:'var(--sr)',preview:'var(--sg)',online:'#5a6472',down:'var(--sa)',unset:'#20242e'}[k];
+      O(s,tx,161,35,36,C,3,(k==='program'||k==='preview')?2:1);if(k==='program'||k==='preview')R(s,tx+1,162,33,4,C);
+      T(s,tx+13,175,(i+1),{size:15,color:k==='unset'?'#414a5a':k==='down'?'var(--sa)':'var(--sw)',w:800});
+      if(k==='program')T(s,tx+3,190,'PRG',{size:7,color:'var(--sr)',w:800});if(k==='preview')T(s,tx+3,190,'PVW',{size:7,color:'var(--sg)',w:800});if(k==='down')T(s,tx+27,190,'!',{size:9,color:'var(--sa)',w:800});
+      if(i===0)R(s,tx+11,200,12,2,'var(--sw)');});
+    L(s,0,205,320,1,'var(--sw)',.15);T(s,4,214,'TX',{size:8,color:'var(--sd)',w:700});
+    for(let i=0;i<44;i++){const h=Math.max(1,(Math.sin(i*.5)*.5+.5)*10*((i%9<3)?.2:1));R(s,24+i*6.4,224-h,4.5,h,i>38?'var(--sg)':'#166e33');}}
+  function console_(s){head(s);tallyBox(s);radar(s,222,88,56,.4,.28);T(s,304,32,'Z',{size:9,color:'var(--sd)'});L(s,308,44,3,96,'var(--st)');R(s,306,88,7,52,'var(--sr)');strip(s);}
+
+  console_(S('console'));console_(S('console2'));
+  head(S('hdr'));
+
+  // feedback strips
+  (function(){const s=S('fOvr');bars(s,6,7,3);T(s,24,4,'churchcam',{size:9});T(s,24,14,'10.13.37.2',{size:8,color:'var(--sd)'});pillC(s,150,2,164,21,'OVERRIDE 1','var(--sr)','#fff',13);})();
+  (function(){const s=S('fRec');bars(s,6,7,3);T(s,24,4,'churchcam',{size:9});T(s,24,14,'10.13.37.2',{size:8,color:'var(--sd)'});pillC(s,150,2,164,21,'PRESET 1 RECALL','var(--sg)','#001',13);})();
+
+  // save popup
+  (function(){const s=S('save');R(s,0,0,320,240,'var(--sa)');R(s,0,0,320,44,'#000');
+    T(s,18,13,'PRESET 1 SAVED',{size:16,color:'var(--sa)',w:800});T(s,20,58,'CAM 1  WIDE',{size:15,color:'#000',w:800});
+    function sb(by,lab,f){T(s,20,by,lab,{size:9,color:'#000',w:800,ls:'.08em'});const bx=78,bw=216,cx=bx+bw/2;R(s,bx,by+1,bw,6,'#bd950f');L(s,cx,by-2,1,11,'#000');const e=cx+f*(bw/2),fx=Math.min(cx,e),fw=Math.max(Math.abs(e-cx),1);R(s,fx,by+1,fw,6,'#000');}
+    sb(102,'PAN',.35);sb(134,'TILT',-.2);sb(166,'ZOOM',.6);T(s,20,206,'Tap the button to recall this position.',{size:9,color:'#7a5c00'});})();
+
+  // setup
+  (function(){const s=S('scrSetup');R(s,0,0,320,30,'var(--sa)');T(s,10,8,'SETUP MODE',{size:15,color:'#000',w:800});
+    T(s,14,54,'JOIN WI-FI',{size:8,color:'var(--sd)',w:800,ls:'.14em'});O(s,14,62,220,30,'var(--sa)',4);T(s,24,70,'ptz-setup',{size:18,color:'var(--sa)',w:800});
+    T(s,14,110,'THEN OPEN',{size:8,color:'var(--sd)',w:800,ls:'.14em'});O(s,14,118,220,30,'#2a3340',4);T(s,24,126,'192.168.4.1',{size:18,color:'var(--sg)',w:800});
+    T(s,14,186,'Set Wi-Fi, ATEM & cameras there.',{size:8,color:'var(--sd)'});})();
+
+  // connecting
+  (function(){const s=S('sConn');R(s,0,0,320,26,'#171205');L(s,0,26,320,2,'var(--sa)');T(s,10,7,'ChurchCam',{size:13,color:'var(--sa)',w:800});T(s,250,9,'PTZ CTRL',{size:8,color:'#6b5a1e',w:800,ls:'.12em'});
+    TC(s,108,'Reconnecting',{size:22,color:'var(--sw)',w:800});dot(s,138,148,'var(--sa)',9);dot(s,157,148,'var(--sa)',9);dot(s,176,148,'#3a2f0c',9);
+    TC(s,182,'Wi-Fi dropped — keeps retrying.',{size:10,color:'var(--sd)'});})();
+
+  // no atem
+  (function(){const s=S('sNoAtem');bars(s,6,7,3);T(s,24,4,'churchcam',{size:9});T(s,24,14,'10.13.37.2',{size:8,color:'var(--sd)'});R(s,228,3,13,12,'var(--sd)');T(s,231,4,'A',{size:9,color:'#000',w:800});O(s,250,2,64,15,'var(--sa)',2);add(s,{left:'250px',top:'2px',width:'64px',height:'15px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'9px',color:'var(--sa)',fontWeight:800,t:'NO ATEM'});L(s,0,22,320,1,'var(--sw)',.3);
+    O(s,6,27,120,116,'var(--sa)',3,3);R(s,8,29,72,13,'var(--sa)');T(s,12,31,'DIRECT',{size:8,color:'#000',w:800});T(s,36,50,'1',{size:74,color:'var(--sw)',w:800});
+    const cx=222,cy=76,r=46;O(s,cx-r,cy-r,2*r,2*r,'var(--sa)',r,2);L(s,cx-r,cy,2*r,1,'var(--st)');L(s,cx,cy-r,1,2*r,'var(--st)');dot(s,cx+14,cy-10,'var(--sa)',9);
+    T(s,134,130,'ATEM offline — no tally.',{size:9,color:'var(--sa)'});T(s,134,143,'Driving preview cam direct.',{size:9,color:'var(--sd)'});})();
+
+  function fit(){document.querySelectorAll('.screen-wrap').forEach(w=>{const s=w.querySelector('.screen');if(s)s.style.transform='scale('+(w.clientWidth/320)+')';});
+    document.querySelectorAll('.strip-wrap').forEach(w=>{const s=w.querySelector('.strip');if(s)s.style.transform='scale('+(w.clientWidth/320)+')';});}
+  addEventListener('resize',fit);fit();
+</script>

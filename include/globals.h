@@ -152,6 +152,11 @@ extern struct LogItem LogItems[];
 
 // Extern functions
 void broadcastTelemetry(const char* msg);   // push a telemetry frame to /ws clients (Web.cpp)
+extern volatile uint32_t g_txCount;          // packets sent (display TX histogram)
+extern bool WiFiWorked;                      // WiFi has connected at least once (connecting vs reconnecting)
+void notePreset(int num, bool isSet);        // latch a preset recall/save for the display's button pill
+extern volatile bool g_otaActive;            // firmware update in progress (display shows the OTA screen)
+extern volatile uint32_t g_otaBytes;         // bytes written so far during OTA
 struct LogItem getLogItem(uint8_t i);
 void cameraControlLoop();
 void cameraControlSetup();

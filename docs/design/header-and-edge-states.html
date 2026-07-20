@@ -1,0 +1,233 @@
+<title>ChurchCam — Header, Button Pills & Edge States v2</title>
+<style>
+  :root{
+    --bg:#0b0c0f;--panel:#15181e;--panel2:#1b1f27;--edge:#272c37;--edge2:#333a47;
+    --ink:#e9ecf2;--muted:#98a0ae;--faint:#6b7280;--accent:#33d17a;--air:#ff3b30;--amber:#ffcb30;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --scr-white:#f4f6f8;--scr-green:#25e05a;--scr-red:#ff2b23;--scr-amber:#ffd21e;--scr-dim:#3a4150;--scr-track:#20242e;--scr-blue:#38b6ff;
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:radial-gradient(1200px 700px at 80% -8%,#14181f 0,transparent 60%),var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;padding:clamp(20px,4vw,56px) clamp(16px,4vw,40px) 80px}
+  .wrap{max-width:1080px;margin:0 auto}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  h1{font-weight:680;letter-spacing:-.02em;font-size:clamp(28px,5vw,44px);line-height:1.04;margin:0 0 16px;text-wrap:balance}
+  h1 .sub{display:block;color:var(--muted);font-weight:500;font-size:.5em;letter-spacing:0;margin-top:10px}
+  .lede{color:var(--muted);max-width:66ch;font-size:16px;margin:0}
+  .section{margin-top:52px}
+  .section>h2{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 8px;font-weight:600;border-top:1px solid var(--edge);padding-top:18px}
+  .section>.sn{color:var(--muted);font-size:14px;margin:0 0 22px;max-width:66ch}
+  .section>.sn code{font-family:var(--mono);font-size:.85em;color:var(--ink);background:var(--panel2);padding:1px 6px;border-radius:5px;border:1px solid var(--edge)}
+
+  .bz{background:linear-gradient(#0c0d10,#070809);border:1px solid var(--edge2);border-radius:12px;padding:12px}
+  .strip-wrap{position:relative;width:100%;aspect-ratio:320/26;border-radius:3px;overflow:hidden;background:#000}
+  .strip{position:absolute;inset:0;width:320px;height:26px;transform-origin:0 0;font-family:var(--mono)}
+  .strip *{position:absolute;font-family:var(--mono);line-height:1;letter-spacing:.02em}
+  .lbl{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin:10px 2px 0}
+
+  .prow{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:8px}
+  @media(max-width:640px){.prow{grid-template-columns:1fr}}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:26px}
+  .card{background:var(--panel);border:1px solid var(--edge);border-radius:16px;padding:16px}
+  .screen-wrap{position:relative;width:100%;aspect-ratio:320/240;border-radius:4px;overflow:hidden;outline:1px solid #000;box-shadow:inset 0 0 0 1px #ffffff10,inset 0 0 36px #0008}
+  .screen{position:absolute;top:0;left:0;width:320px;height:240px;transform-origin:0 0;background:#000;color:var(--scr-white);font-family:var(--mono)}
+  .screen *{position:absolute;font-family:var(--mono);letter-spacing:.02em;line-height:1}
+  .card h3{margin:13px 2px 2px;font-size:17px;font-weight:650;display:flex;align-items:center;gap:8px}
+  .card .st{width:9px;height:9px;border-radius:50%}
+  .card p{color:var(--muted);font-size:13px;margin:7px 2px 0}
+  .card .trig{font-family:var(--mono);font-size:11px;color:var(--faint);margin:8px 2px 0}
+  .note{color:var(--muted);font-size:13.5px;margin-top:18px;max-width:74ch}
+  .note code{font-family:var(--mono);font-size:.85em;color:var(--ink);background:var(--panel2);padding:1px 6px;border-radius:5px;border:1px solid var(--edge)}
+  .note b{color:var(--ink)}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">ChurchCam · header + buttons + edge states · v2</p>
+  <h1>Signal bars, subsystem pills, and live button feedback
+    <span class="sub">Plus the fixed edge states — Connecting now amber with a real wordmark, and Network-lost matches what the firmware actually does (just keeps retrying).</span>
+  </h1>
+  <p class="lede">The header now folds three things into one strip: how the device is connected, the state of the switcher, and a flash whenever you press a physical button.</p>
+
+  <!-- ===== HEADER ===== -->
+  <div class="section">
+    <h2>The header — signal + subsystem pills</h2>
+    <p class="sn">Wi-Fi strength bars + host/IP/RSSI on the left; the switcher's state as colored pills on the right. Normal service:</p>
+    <div class="bz"><div class="strip-wrap"><div class="strip" id="hdr"></div></div></div>
+    <p class="lbl">4-bar signal · churchcam · 10.13.37.2 · -54 dB   |   ATEM ✓ · big ● ON AIR (off air = dim outline)</p>
+  </div>
+
+  <!-- ===== BUTTON PILLS ===== -->
+  <div class="section">
+    <h2>Button-press pills</h2>
+    <p class="sn">Each press flashes a pill in the header's right slot. A <b>tap</b> recalls a preset (brief green flash); <b>holding OVERRIDE while you tap</b> saves the current position — which triggers the full-screen confirmation in the next section.</p>
+    <div class="prow">
+      <div><div class="bz"><div class="strip-wrap"><div class="strip" id="btnOvr"></div></div></div><p class="lbl">OVERRIDE held — red, driving the PROGRAM camera</p></div>
+      <div><div class="bz"><div class="strip-wrap"><div class="strip" id="btnP1"></div></div></div><p class="lbl">Tap a preset — RECALL (green flash)</p></div>
+      <div><div class="bz"><div class="strip-wrap"><div class="strip" id="btnIdle"></div></div></div><p class="lbl">Idle — status pills showing</p></div>
+    </div>
+    <p class="note">Maps to <code>PIN_OVERRIDE</code>, <code>PIN_RECALL_1</code>, <code>PIN_RECALL_2</code>. Override is <b>held</b> (red while driving live). <b>Tap = recall; OVERRIDE + tap = save</b> → full-screen popup. Pill text is the same size as ON&nbsp;AIR now.</p>
+  </div>
+
+  <!-- ===== EDGE STATES ===== -->
+  <div class="section">
+    <h2>Edge states — fixed</h2>
+    <p class="sn">Distinct full-screen layouts. Setup + Connecting/Lost share the amber "you need to do something / hang tight" language; hard failures go red.</p>
+    <div class="grid">
+      <div class="card"><div class="bz"><div class="screen-wrap"><div class="screen" id="eSave"></div></div></div>
+        <h3><span class="st" style="background:var(--scr-amber)"></span>Preset saved (full-screen)</h3>
+        <p>~2.5s takeover after OVERRIDE + tap. Shows the camera and the saved P/T/Z position, then the console returns. The control loop keeps running underneath.</p>
+        <p class="trig">when: OVERRIDE held + preset button tapped</p></div>
+      <div class="card"><div class="bz"><div class="screen-wrap"><div class="screen" id="e1"></div></div></div>
+        <h3><span class="st" style="background:var(--scr-amber)"></span>Setup / AP mode</h3>
+        <p>Reachable only on its own hotspot. SSID + IP shown like fields to copy.</p>
+        <p class="trig">when: hotspot up, no station/Ethernet link</p></div>
+      <div class="card"><div class="bz"><div class="screen-wrap"><div class="screen" id="e2"></div></div></div>
+        <h3><span class="st" style="background:var(--scr-amber)"></span>Connecting / reconnecting</h3>
+        <p>Amber now, wordmark up top. Says whether it's a first connect or a reconnect — but no fake countdown; it just keeps trying.</p>
+        <p class="trig">when: no IP yet (boot or link drop)</p></div>
+      <div class="card"><div class="bz"><div class="screen-wrap"><div class="screen" id="e3"></div></div></div>
+        <h3><span class="st" style="background:var(--scr-amber)"></span>No ATEM (degraded)</h3>
+        <p>Console still drives directly; tally box becomes an amber DIRECT panel. Text no longer overlaps the radar.</p>
+        <p class="trig">when: network up, ATEM unreachable</p></div>
+      <div class="card"><div class="bz"><div class="screen-wrap"><div class="screen" id="e5"></div></div></div>
+        <h3><span class="st" style="background:var(--scr-green)"></span>Updating firmware</h3>
+        <p>Full-screen progress + a hard "do not power off." Locks out everything during OTA.</p>
+        <p class="trig">when: /update OTA in progress</p></div>
+      <div class="card"><div class="bz"><div class="screen-wrap"><div class="screen" id="e6"></div></div></div>
+        <h3><span class="st" style="background:var(--scr-dim)"></span>Input has no camera</h3>
+        <p>ATEM on a laptop/media input → says so instead of a dead tally.</p>
+        <p class="trig">when: active input has no camera IP</p></div>
+    </div>
+    <p class="note"><b>On "network lost":</b> the firmware doesn't time-out to the AP after a drop — if Wi-Fi was working it just retries forever (restart to reconfigure). So there's no separate red "lost" screen with a countdown; the Connecting screen simply reads <b>Reconnecting…</b> when it had a link before. Faithful to the code, same as our rule for the ATEM sim.</p>
+  </div>
+</div>
+
+<script>
+  const S=id=>document.getElementById(id);
+  function add(s,o){const d=document.createElement('div');for(const k in o){if(k==='t')d.textContent=o[k];else d.style[k]=o[k];}s.appendChild(d);return d;}
+  function T(s,x,y,t,{size=10,color='var(--scr-white)',w=600,ls='.02em'}={}){return add(s,{left:x+'px',top:y+'px',whiteSpace:'nowrap',fontSize:size+'px',color,fontWeight:w,letterSpacing:ls,t});}
+  function TC(s,y,t,o={}){const el=T(s,0,y,t,o);el.style.left='0';el.style.right='0';el.style.textAlign='center';el.style.width='320px';return el;}
+  function R(s,x,y,w,h,c,r=0){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',background:c,borderRadius:r+'px'});}
+  function L(s,x,y,w,h,c,op=1){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',background:c,opacity:op});}
+  function O(s,x,y,w,h,c,r=0,bw=1){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',border:bw+'px solid '+c,borderRadius:r+'px'});}
+  function dot(s,x,y,c,d=6){return add(s,{left:x+'px',top:y+'px',width:d+'px',height:d+'px',borderRadius:'50%',background:c});}
+  function bars(s,x,y,n){for(let i=0;i<4;i++){const bh=(i+1)*2.4;R(s,x+i*3.5,y+10-bh,2.6,bh,i<n?'var(--scr-white)':'#2b3140');}}
+  function pill(s,x,y,w,label,col,{fill=false,tcol}={}){if(fill)R(s,x,y,w,14,col,3);else O(s,x,y,w,14,col,3);T(s,x+6,y+3,label,{size:8,color:tcol||(fill?'#000':col),w:800,ls:'.03em'});return x+w;}
+
+  /* ===== HEADER (signal + subsystem pills) ===== */
+  function baseLeft(s){bars(s,6,7,3);T(s,24,4,'churchcam',{size:9});T(s,24,14,'10.13.37.2 · -54dB',{size:8,color:'var(--scr-dim)'});}
+  function statusPills(s){
+    // ATEM ok (compact)
+    O(s,170,6,42,14,'var(--scr-green)',3);dot(s,176,10,'var(--scr-green)',5);T(s,185,9,'ATEM',{size:8,color:'var(--scr-green)',w:800});
+    // ON AIR — twice the size, the star of the right slot (no PGM pill)
+    R(s,218,2,96,21,'var(--air)',3);dot(s,229,9,'#fff',7);T(s,244,6,'ON AIR',{size:13,color:'#fff',w:800,ls:'.05em'});
+  }
+  function pillC(s,x,y,w,h,label,bg,fg,size){R(s,x,y,w,h,bg,3);add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size+'px',color:fg,fontWeight:800,whiteSpace:'nowrap',letterSpacing:'.04em',t:label});}
+  (function(){const s=S('hdr');baseLeft(s);statusPills(s);})();
+  (function(){const s=S('btnIdle');baseLeft(s);statusPills(s);})();
+  (function(){const s=S('btnOvr');baseLeft(s);pillC(s,150,2,164,21,'OVERRIDE 1','var(--air)','#fff',13);})();
+  (function(){const s=S('btnP1');baseLeft(s);pillC(s,150,2,164,21,'PRESET 1 RECALL','var(--scr-green)','#001',13);})();
+
+  /* mini console header for edge screens */
+  function miniHead(s,mode){
+    bars(s,6,5,3);T(s,24,3,'churchcam',{size:9});T(s,24,12,'10.13.37.2',{size:9,color:'var(--scr-dim)'});
+    if(mode==='noatem'){R(s,228,3,13,12,'var(--scr-dim)');T(s,231,4,'A',{size:9,color:'#000',w:800});O(s,250,2,64,15,'var(--scr-amber)',2);T(s,258,4,'NO ATEM',{size:9,color:'var(--scr-amber)',w:800});}
+    else if(mode==='ok'){R(s,228,3,13,12,'var(--scr-white)');T(s,231,4,'A',{size:9,color:'#000',w:800});O(s,250,2,64,15,'var(--scr-dim)',2);T(s,263,4,'OFF AIR',{size:9,color:'var(--scr-dim)',w:700});}
+    L(s,0,22,320,1,'var(--scr-white)',.3);
+  }
+
+  /* ===== SAVE POPUP (full-screen amber) ===== */
+  (function(){const s=S('eSave');
+    R(s,0,0,320,240,'var(--scr-amber)');
+    R(s,0,0,320,44,'#000');
+    T(s,18,13,'PRESET 1 SAVED',{size:16,color:'var(--scr-amber)',w:800,ls:'.02em'});
+    T(s,20,58,'CAM 1  WIDE',{size:15,color:'#000',w:800});
+    function sbar(by,lab,frac){T(s,20,by,lab,{size:9,color:'#000',w:800,ls:'.08em'});
+      const bx=78,bw=216,cx=bx+bw/2;R(s,bx,by+1,bw,6,'#bd950f');L(s,cx,by-2,1,11,'#000',1);
+      const end=cx+frac*(bw/2),fx=Math.min(cx,end),fw=Math.max(Math.abs(end-cx),1);R(s,fx,by+1,fw,6,'#000');}
+    sbar(102,'PAN',0.35);sbar(134,'TILT',-0.2);sbar(166,'ZOOM',0.6);
+    T(s,20,206,'Tap the button to recall this position.',{size:9,color:'#7a5c00'});
+  })();
+
+  /* ===== E1 · SETUP ===== */
+  (function(){const s=S('e1');
+    R(s,0,0,320,30,'var(--scr-amber)');T(s,10,8,'SETUP MODE',{size:15,color:'#000',w:800,ls:'.03em'});
+    add(s,{left:'286px',top:'7px',width:'16px',height:'14px',background:'radial-gradient(circle at 50% 100%,#000 0 2px,transparent 2px),radial-gradient(circle at 50% 100%,transparent 0 4px,#000 4px 5px,transparent 5px)'});
+    T(s,14,50,'No network yet — connect your',{size:10,color:'var(--scr-dim)'});
+    T(s,14,63,'phone or laptop to set it up:',{size:10,color:'var(--scr-dim)'});
+    T(s,14,86,'JOIN WI-FI',{size:8,color:'var(--scr-dim)',w:800,ls:'.14em'});
+    O(s,14,94,220,30,'var(--scr-amber)',4);T(s,24,102,'ptz-setup',{size:18,color:'var(--scr-amber)',w:800});
+    T(s,14,140,'THEN OPEN',{size:8,color:'var(--scr-dim)',w:800,ls:'.14em'});
+    O(s,14,148,220,30,'#2a3340',4);T(s,24,156,'192.168.4.1',{size:18,color:'var(--scr-green)',w:800});
+    L(s,0,196,320,1,'var(--scr-white)',.14);
+    T(s,14,210,'Set Wi-Fi, ATEM & cameras, then it reconnects automatically.',{size:8,color:'var(--scr-dim)'});
+  })();
+
+  /* ===== E2 · CONNECTING (amber, wordmark) ===== */
+  (function(){const s=S('e2');
+    // top wordmark bar
+    R(s,0,0,320,26,'#171205');L(s,0,26,320,2,'var(--scr-amber)',1);
+    T(s,10,7,'ChurchCam',{size:13,color:'var(--scr-amber)',w:800,ls:'-.01em'});
+    T(s,250,9,'PTZ CTRL',{size:8,color:'#6b5a1e',w:800,ls:'.12em'});
+    TC(s,110,'Reconnecting…',{size:24,color:'var(--scr-white)',w:800});
+    // amber dots
+    dot(s,138,150,'var(--scr-amber)',9);dot(s,157,150,'var(--scr-amber)',9);dot(s,176,150,'#3a2f0c',9);
+    TC(s,180,'Wi-Fi dropped — keeps retrying.',{size:10,color:'var(--scr-dim)'});
+    TC(s,206,'Restart the device to change settings.',{size:9,color:'#4a5262'});
+  })();
+
+  /* ===== E3 · NO ATEM (fixed, no overlap) ===== */
+  (function(){const s=S('e3');miniHead(s,'noatem');
+    // amber DIRECT box
+    O(s,6,27,120,116,'var(--scr-amber)',3,3);R(s,8,29,72,13,'var(--scr-amber)');T(s,12,31,'DIRECT',{size:8,color:'#000',w:800});
+    T(s,36,50,'1',{size:74,color:'var(--scr-white)',w:800});
+    L(s,14,120,106,1,'#3a2a12',1);T(s,14,127,'CAM 1 · WIDE',{size:9,color:'var(--scr-white)',w:800});
+    dot(s,14,137,'var(--scr-green)',5);T(s,24,135,'VISCA UDP',{size:8,color:'var(--scr-green)',w:700});
+    // radar amber (centered in right area, no text over it)
+    const cx=222,cy=76,r=46;
+    add(s,{left:(cx-r)+'px',top:(cy-r)+'px',width:(2*r)+'px',height:(2*r)+'px',borderRadius:'50%',border:'2px solid var(--scr-amber)'});
+    L(s,cx-r,cy,2*r,1,'var(--scr-track)');L(s,cx,cy-r,1,2*r,'var(--scr-track)');dot(s,cx+14,cy-10,'var(--scr-amber)',9);
+    // note placed BELOW the radar, clear of it
+    T(s,134,132,'ATEM offline — no tally.',{size:9,color:'var(--scr-amber)'});
+    T(s,134,143,'Driving preview cam direct.',{size:9,color:'var(--scr-dim)'});
+    // strip (connection only)
+    T(s,6,158,'INPUTS',{size:8,color:'var(--scr-dim)',w:700,ls:'.14em'});
+    for(let i=0;i<8;i++){const tx=6+i*39;const on=[0,1,2,6].includes(i);const dn=i===3;
+      O(s,tx,164,35,36,dn?'var(--scr-amber)':on?'#5a6472':'#20242e',3,1);
+      T(s,tx+13,178,(i+1),{size:15,color:dn?'var(--scr-amber)':on?'var(--scr-white)':'#414a5a',w:800});
+      if(dn)T(s,tx+27,199,'!',{size:9,color:'var(--scr-amber)',w:800});}
+    L(s,0,220,320,1,'var(--scr-white)',.15);T(s,4,231,'TX',{size:8,color:'var(--scr-dim)',w:700});
+    for(let i=0;i<40;i++){const h=Math.max(1,(Math.sin(i*.5)*.5+.5)*10*((i%9<3)?.2:1));R(s,24+i*7,237-h,5,h,'#166e33');}
+  })();
+
+  /* ===== E5 · UPDATING ===== */
+  (function(){const s=S('e5');
+    TC(s,44,'UPDATING FIRMWARE',{size:15,color:'var(--scr-white)',w:800,ls:'.03em'});
+    O(s,30,96,260,26,'#2a3340',5);R(s,33,99,158,20,'var(--scr-amber)',3);
+    T(s,150,103,'62%',{size:13,color:'#000',w:800});
+    TC(s,150,'writing 812 KB / 1.3 MB',{size:10,color:'var(--scr-dim)'});
+    R(s,0,196,320,44,'var(--air)');dot(s,20,213,'#fff',10);T(s,40,204,'DO NOT POWER OFF',{size:14,color:'#fff',w:800});T(s,40,220,'the device reboots when done',{size:8,color:'#fff'});
+  })();
+
+  /* ===== E6 · NO CAMERA ON INPUT ===== */
+  (function(){const s=S('e6');miniHead(s,'ok');
+    O(s,6,27,120,116,'var(--scr-dim)',3,3);R(s,8,29,66,13,'var(--scr-dim)');T(s,12,31,'INPUT 5',{size:8,color:'#0b0c0f',w:800});
+    T(s,50,54,'—',{size:56,color:'var(--scr-dim)',w:800});
+    L(s,14,120,106,1,'#242832',1);T(s,14,127,'NO CAMERA HERE',{size:9,color:'var(--scr-dim)',w:800});
+    T(s,14,137,'(media player / laptop)',{size:8,color:'#31384a'});
+    T(s,150,66,'Nothing to drive on',{size:10,color:'var(--scr-dim)'});T(s,150,80,'this input.',{size:10,color:'var(--scr-dim)'});
+    T(s,150,106,'Switch preview to a',{size:9,color:'#4a5262'});T(s,150,118,'camera to control it.',{size:9,color:'#4a5262'});
+    T(s,6,158,'INPUTS',{size:8,color:'var(--scr-dim)',w:700,ls:'.14em'});
+    for(let i=0;i<8;i++){const tx=6+i*39;const on=[0,1,3,6].includes(i);const pv=i===0;
+      O(s,tx,164,35,36,pv?'var(--scr-green)':on?'#5a6472':'#20242e',3,pv?2:1);if(pv)R(s,tx+1,165,33,4,'var(--scr-green)');
+      T(s,tx+13,178,(i+1),{size:15,color:on?'var(--scr-white)':'#414a5a',w:800});}
+    L(s,0,220,320,1,'var(--scr-white)',.15);T(s,4,231,'TX',{size:8,color:'var(--scr-dim)',w:700});
+  })();
+
+  function fit(){
+    document.querySelectorAll('.screen-wrap').forEach(w=>{const s=w.querySelector('.screen');if(s)s.style.transform='scale('+(w.clientWidth/320)+')';});
+    document.querySelectorAll('.strip-wrap').forEach(w=>{const s=w.querySelector('.strip');if(s)s.style.transform='scale('+(w.clientWidth/320)+')';});
+  }
+  addEventListener('resize',fit);fit();
+</script>

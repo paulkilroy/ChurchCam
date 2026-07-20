@@ -1,0 +1,166 @@
+<title>ChurchCam — Console + Radar + Camera Strip</title>
+<style>
+  :root{
+    --bg:#0b0c0f;--panel:#15181e;--panel2:#1b1f27;--edge:#272c37;--edge2:#333a47;
+    --ink:#e9ecf2;--muted:#98a0ae;--faint:#6b7280;--accent:#33d17a;--air:#ff3b30;--amber:#ffcb30;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --scr-white:#f4f6f8;--scr-green:#25e05a;--scr-red:#ff2b23;--scr-amber:#ffd21e;--scr-dim:#3a4150;--scr-track:#20242e;
+  }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:radial-gradient(1200px 700px at 80% -8%,#14181f 0,transparent 60%),var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;padding:clamp(20px,4vw,56px) clamp(16px,4vw,40px) 80px}
+  .wrap{max-width:1000px;margin:0 auto}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+  h1{font-weight:680;letter-spacing:-.02em;font-size:clamp(28px,5vw,44px);line-height:1.04;margin:0 0 16px;text-wrap:balance}
+  h1 .sub{display:block;color:var(--muted);font-weight:500;font-size:.5em;letter-spacing:0;margin-top:10px}
+  .lede{color:var(--muted);max-width:64ch;font-size:16px;margin:0}
+  .lede b{color:var(--ink)}
+
+  .hero{margin-top:34px}
+  .bezel{width:100%;max-width:760px;margin:0 auto;background:linear-gradient(#0c0d10,#070809);border:1px solid var(--edge2);border-radius:18px;padding:18px;box-shadow:0 28px 70px -30px #000,inset 0 1px 0 #ffffff0d}
+  .screen-wrap{position:relative;width:100%;aspect-ratio:320/240;border-radius:5px;overflow:hidden;outline:1px solid #000;box-shadow:inset 0 0 0 1px #ffffff10,inset 0 0 40px #0008}
+  .screen{position:absolute;top:0;left:0;width:320px;height:240px;transform-origin:0 0;background:#000;color:var(--scr-white);font-family:var(--mono);transform:scale(var(--s,2.3))}
+  .screen *{position:absolute;font-family:var(--mono);letter-spacing:.02em;line-height:1}
+  .cap{font-family:var(--mono);font-size:11.5px;color:var(--faint);margin:14px 2px 0;text-align:center}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:44px}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:18px 20px}
+  .panel h2{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);margin:0 0 16px;font-weight:600}
+  .panel ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:12px}
+  .panel li{position:relative;padding-left:22px;font-size:13.5px}
+  .panel li::before{content:"";position:absolute;left:2px;top:7px;width:7px;height:7px;border-radius:2px;background:var(--accent)}
+  .panel li b{color:var(--ink)}
+  .panel li.q{color:var(--muted)} .panel li.q::before{background:var(--amber);transform:rotate(45deg)}
+
+  /* tile legend */
+  .tiles{display:flex;gap:12px;flex-wrap:wrap}
+  .tl{text-align:center;flex:1;min-width:96px}
+  .tl .t{width:64px;height:44px;margin:0 auto 8px;background:#000;border-radius:5px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:800;font-size:20px;color:#fff;position:relative;overflow:hidden}
+  .tl .strip{position:absolute;top:0;left:0;right:0;height:6px}
+  .tl .mini{position:absolute;bottom:2px;left:4px;font-size:7px;font-weight:800}
+  .tl small{display:block;color:var(--muted);font-size:11.5px;font-family:var(--mono)}
+
+  .rec{background:var(--panel);border:1px solid var(--edge);border-left:3px solid var(--accent);border-radius:10px;padding:16px 18px;margin-top:26px}
+  .rec p{margin:0;font-size:14.5px}.rec .k{font-family:var(--mono);color:var(--accent)}
+  .note{color:var(--muted);font-size:13.5px;margin-top:14px;max-width:70ch}
+  .note code{font-family:var(--mono);font-size:.85em;color:var(--ink);background:var(--panel2);padding:1px 6px;border-radius:5px;border:1px solid var(--edge)}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">ChurchCam · 320×240 · Console + Radar — refined</p>
+  <h1>Now with a live camera bus
+    <span class="sub">The active camera's status reads in caps inside its tally box; the old PGM/PVW text becomes a strip of all 8 inputs — dim when offline, tallied PRG / PVW when live.</span>
+  </h1>
+  <p class="lede">One glance now tells you <b>which camera you're driving and its state</b>, <b>where the joystick is</b>, <b>what the whole switcher bus looks like</b>, and <b>whether you're streaming</b> — without a single ambiguous label.</p>
+
+  <div class="hero">
+    <div class="bezel"><div class="screen-wrap"><div class="screen" id="scr"></div></div></div>
+    <p class="cap">Console + Radar + 8-input camera strip · rendered at ~2.3× (real screen is 320×240)</p>
+  </div>
+
+  <div class="cols">
+    <div class="panel">
+      <h2>The camera strip · 8 inputs</h2>
+      <div class="tiles">
+        <div class="tl"><div class="t" style="outline:2px solid var(--scr-red);color:#fff"><span class="strip" style="background:var(--scr-red)"></span>1<span class="mini" style="color:var(--scr-red)">PRG</span></div><small>PROGRAM</small></div>
+        <div class="tl"><div class="t" style="outline:2px solid var(--scr-green)"><span class="strip" style="background:var(--scr-green)"></span>2<span class="mini" style="color:var(--scr-green)">PVW</span></div><small>PREVIEW</small></div>
+        <div class="tl"><div class="t" style="outline:1px solid #4b5462">3</div><small>connected</small></div>
+        <div class="tl"><div class="t" style="outline:1px solid var(--scr-amber);color:var(--scr-amber)">4<span class="mini" style="color:var(--scr-amber);right:4px;left:auto">!</span></div><small style="color:var(--scr-amber)">configured,<br>no reply</small></div>
+        <div class="tl"><div class="t" style="outline:1px solid #262b35;color:#3c4454">5</div><small style="color:var(--faint)">not configured</small></div>
+      </div>
+      <p class="note" style="margin-top:16px">The tile you're driving gets a white underline. Program/Preview come from <code>getProgramInputVideoSource()</code> / <code>getPreviewInputVideoSource()</code>; the rest map to cached camera status — <b style="color:var(--scr-amber)">amber "!"</b> = has an IP but not responding (<code>CAMERA_DOWN</code>), dim = no IP set (<code>CAMERA_NA</code>).</p>
+    </div>
+    <div class="panel">
+      <h2>What's on screen</h2>
+      <ul>
+        <li><b>Tally box</b> — frame color = Program (red) / Preview (green) / Off; caps status <b>inside</b>: number, name, ● reachable</li>
+        <li><b>Radar</b> — pan/tilt dot live; ring matches tally color; zoom on the right rail</li>
+        <li><b>Camera strip</b> — all 8 inputs, dim when offline, PRG/PVW tally badges</li>
+        <li><b>On-Air pill</b> — livestream state, kept separate from Program</li>
+        <li><b>Histogram</b> — TX/sec, thin along the bottom</li>
+        <li class="q">Open Q: 8 tiles across 320px are ~35 px — number + tally read fine, but no room for names. OK?</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="rec">
+    <p><span class="k">Ready to build →</span> this is a clean, buildable layout. Say go and I'll implement it in <code style="font-family:var(--mono)">Display.cpp</code> against the sim, where you'll see the real pixel-font render and the strip/radar actually move — then we fine-tune spacing, the caps status wording, and colors on real glass.</p>
+  </div>
+</div>
+
+<script>
+  const S=id=>document.getElementById(id);
+  function add(s,o){const d=document.createElement('div');for(const k in o){if(k==='t')d.textContent=o[k];else d.style[k]=o[k];}s.appendChild(d);return d;}
+  function T(s,x,y,t,{size=10,color='var(--scr-white)',w=600,ls='.02em'}={}){return add(s,{left:x+'px',top:y+'px',whiteSpace:'nowrap',fontSize:size+'px',color,fontWeight:w,letterSpacing:ls,t});}
+  function R(s,x,y,w,h,c,r=0){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',background:c,borderRadius:r+'px'});}
+  function L(s,x,y,w,h,c='var(--scr-white)',op=1){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',background:c,opacity:op});}
+  function O(s,x,y,w,h,c,r=0,bw=1){return add(s,{left:x+'px',top:y+'px',width:w+'px',height:h+'px',border:bw+'px solid '+c,borderRadius:r+'px'});}
+  function dot(s,x,y,c,d=6){return add(s,{left:x+'px',top:y+'px',width:d+'px',height:d+'px',borderRadius:'50%',background:c});}
+  function wifi(s,x,y,c='var(--scr-white)'){add(s,{left:x+'px',top:y+'px',width:'13px',height:'9px',background:'radial-gradient(circle at 50% 100%,'+c+' 0 2px,transparent 2px),radial-gradient(circle at 50% 100%,transparent 0 4px,'+c+' 4px 5px,transparent 5px),radial-gradient(circle at 50% 100%,transparent 0 7px,'+c+' 7px 8px,transparent 8px)'});}
+  function flex(el){el.style.display='flex';el.style.alignItems='center';el.style.justifyContent='center';return el;}
+
+  function head(s,on){
+    wifi(s,6,5);T(s,24,1,'churchcam',{size:9});T(s,24,10,'10.13.37.2',{size:9,color:'var(--scr-dim)'});
+    R(s,232,2,13,12,'var(--scr-white)');T(s,235,3,'A',{size:9,color:'#000',w:800});
+    if(on){R(s,250,2,64,14,'var(--air)');dot(s,257,6,'#fff');T(s,269,3,'ON AIR',{size:9,color:'#fff',w:800,ls:'.05em'});}
+    else{O(s,250,2,64,14,'var(--scr-dim)',2);T(s,262,3,'OFFLINE',{size:9,color:'var(--scr-dim)',w:700});}
+    L(s,0,23,320,1,'var(--scr-white)',.35);   // divider clears host/ip above it
+  }
+  function radar(s,cx,cy,r,pan,tilt,program){
+    const col=program?'var(--scr-red)':'var(--scr-green)';
+    O(s,cx-r,cy-r,2*r,2*r,col,r,2);O(s,cx-r*.5,cy-r*.5,r,r,'var(--scr-track)',r,1);
+    L(s,cx-r,cy,2*r,1,'var(--scr-track)');L(s,cx,cy-r,1,2*r,'var(--scr-track)');
+    const dx=cx+pan*(r-6),dy=cy-tilt*(r-6);const d=dot(s,dx-5,dy-5,col,10);d.style.boxShadow='0 0 0 2px #000';
+  }
+  function zoomRail(s,x,top,h,frac,program){L(s,x+2,top,3,h,'var(--scr-track)');R(s,x,top+h-frac*h,7,frac*h,program?'var(--scr-red)':'var(--scr-green)');T(s,x-1,top+h+3,'Z',{size:9,color:'var(--scr-dim)',w:700});}
+
+  // 8-input camera strip
+  function camStrip(s,x,y,W,h){
+    // states: program | preview | online(connected) | down(configured,no reply) | unset(no ip)
+    const cams=[
+      {n:1,st:'program',act:true},{n:2,st:'preview'},{n:3,st:'online'},{n:4,st:'down'},
+      {n:5,st:'unset'},{n:6,st:'unset'},{n:7,st:'online'},{n:8,st:'unset'}
+    ];
+    const C={program:'var(--scr-red)',preview:'var(--scr-green)',online:'#5a6472',down:'var(--scr-amber)',unset:'#20242e'};
+    const gap=4,tw=(W-7*gap)/8;
+    cams.forEach((c,i)=>{
+      const tx=x+i*(tw+gap), col=C[c.st], unset=c.st==='unset', down=c.st==='down';
+      const f=flex(O(s,tx,y,tw,h,col,3,(c.st==='program'||c.st==='preview')?2:1));
+      f.style.background='#000';
+      const num=document.createElement('div');num.textContent=c.n;
+      num.style.cssText=`font-family:var(--mono);font-weight:800;font-size:15px;color:${unset?'#414a5a':down?'var(--scr-amber)':'var(--scr-white)'}`;f.appendChild(num);
+      if(c.st==='program'||c.st==='preview'){R(s,tx,y,tw,5,col);T(s,tx+3,y+h-9,c.st==='program'?'PRG':'PVW',{size:7,color:col,w:800});}
+      if(down){T(s,tx+tw-9,y+h-10,'!',{size:9,color:'var(--scr-amber)',w:800});}   // configured, no reply
+      if(c.act){R(s,tx+tw/2-6,y+h+3,12,2,'var(--scr-white)');}
+    });
+  }
+  function histData(n){const a=[];for(let i=0;i<n;i++){let v=Math.sin(i*0.5)*0.5+0.5;v*=(i%13<5)?0.14:1;v=Math.max(0.05,Math.min(1,v*(0.6+((i*37)%13)/22)));a.push(v);}return a;}
+  function thinHist(s){const y=224,h=12,x=24,w=290,bars=58,gap=0.6,bw=(w-(bars-1)*gap)/bars,d=histData(bars);
+    L(s,0,220,320,1,'var(--scr-white)',.15);T(s,4,225,'TX',{size:8,color:'var(--scr-dim)',w:700,ls:'.1em'});
+    for(let i=0;i<bars;i++){const bh=Math.max(1,d[i]*h);R(s,x+i*(bw+gap),y+h-bh,bw,bh,i>bars-8?'var(--scr-green)':'#166e33');}}
+
+  (function(){const s=S('scr');
+    head(s,true);
+    // ---- tally box (all-caps status inside) ----
+    const bx=8,by=26,bw=120,bh=118;
+    O(s,bx,by,bw,bh,'var(--scr-red)',5,3);
+    R(s,bx,by,58,13,'var(--scr-red)');T(s,bx+5,by+2,'PROGRAM',{size:8,color:'#fff',w:800,ls:'.04em'});
+    T(s,bx+30,by+22,'1',{size:78,color:'var(--scr-white)',w:800,ls:'-.04em'});
+    // caps status inside box, bottom
+    L(s,bx+8,by+bh-24,bw-16,1,'var(--scr-white)',.18);
+    T(s,bx+8,by+bh-19,'CAM 1 · WIDE',{size:10,color:'var(--scr-white)',w:800,ls:'.03em'});
+    dot(s,bx+8,by+bh-8,'var(--scr-green)',5);T(s,bx+18,by+bh-10,'VISCA UDP',{size:8,color:'var(--scr-green)',w:700,ls:'.04em'});
+    // ---- radar + zoom (both red on a program camera) ----
+    radar(s,224,86,58,0.4,0.28,true);
+    zoomRail(s,306,30,113,0.7,true);
+    // ---- camera strip: all 8 inputs ----
+    T(s,8,152,'INPUTS',{size:8,color:'var(--scr-dim)',w:700,ls:'.14em'});
+    camStrip(s,8,164,304,38);
+    // ---- histogram ----
+    thinHist(s);
+  })();
+
+  function fit(){document.querySelectorAll('.screen-wrap').forEach(w=>{const s=w.querySelector('.screen');if(s)s.style.setProperty('--s',(w.clientWidth/320).toString());});}
+  addEventListener('resize',fit);fit();
+</script>

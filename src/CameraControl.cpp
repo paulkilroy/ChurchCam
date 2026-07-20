@@ -159,45 +159,33 @@ void buttonLoop() {
     // autoCalibrate();
   } else if ( (digitalRead(PIN_RECALL_1) == LOW) && (wasButton1Pressed == false) ) {
     wasButton1Pressed = true;
-    startPress = millis();
   } else if ( (digitalRead(PIN_RECALL_1) == HIGH) && (wasButton1Pressed == true)){
     wasButton1Pressed = false;
-    endPress = millis();
-    if ((endPress - startPress) > LONG_PRESS_TIME) {
-      logi("Long press on button 1: setting preset 1");
-      if (isVisca(getActiveCamera())) {
-        visca_set_memory(1);
-      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
-        Onvif_SetPreset(1);
-      }
-    } else {
-      logi("Short press on button 1: going to preset 1");
-      if (isVisca(getActiveCamera())) {
-        visca_recall_memory(1);
-      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
-        Onvif_GoToPreset(1);
-      }
+    if ( overridePreview() ) {              // holding OVERRIDE = save this position
+      logi("OVERRIDE + button 1: saving preset 1");
+      if (isVisca(getActiveCamera())) visca_set_memory(1);
+      else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) Onvif_SetPreset(1);
+      notePreset(1, true);
+    } else {                                // tap = recall
+      logi("Button 1: recalling preset 1");
+      if (isVisca(getActiveCamera())) visca_recall_memory(1);
+      else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) Onvif_GoToPreset(1);
+      notePreset(1, false);
     }
   } else if ( (digitalRead(PIN_RECALL_2) == LOW) && (wasButton2Pressed == false)) {
     wasButton2Pressed = true;
-    startPress = millis();
   } else if ( (digitalRead(PIN_RECALL_2) == HIGH) && (wasButton2Pressed == true)) {
     wasButton2Pressed = false;
-    endPress = millis();
-    if ((endPress - startPress) > LONG_PRESS_TIME) {
-      logi("Long press on button 2: setting preset 2");
-      if (isVisca(getActiveCamera())) {
-        visca_set_memory(2);
-      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
-        Onvif_SetPreset(2);
-      }
-    } else {
-      logi("Short press on button 2: going to preset 2");
-      if (isVisca(getActiveCamera())) {
-        visca_recall_memory(2);
-      } else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) {
-        Onvif_GoToPreset(2);
-      }
+    if ( overridePreview() ) {              // holding OVERRIDE = save this position
+      logi("OVERRIDE + button 2: saving preset 2");
+      if (isVisca(getActiveCamera())) visca_set_memory(2);
+      else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) Onvif_SetPreset(2);
+      notePreset(2, true);
+    } else {                                // tap = recall
+      logi("Button 2: recalling preset 2");
+      if (isVisca(getActiveCamera())) visca_recall_memory(2);
+      else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) Onvif_GoToPreset(2);
+      notePreset(2, false);
     }
   } else {
     // TESTING

@@ -37,6 +37,9 @@ struct CameraLink {
 
 static CameraLink cameras[NUM_CAMERAS + 1];
 
+// Count of packets handed to the stack -- sampled by the display's TX histogram.
+volatile uint32_t g_txCount = 0;
+
 // For debugging packets to strings
 void printBytes(byte array[], unsigned int len) {
 
@@ -199,6 +202,7 @@ int camSend( int cameraNumber, byte packet[], int size ) {
   } else {
     written = lwip_send( c.fd, packet, size, 0 );  // connected: UDP and TCP identical
   }
+  g_txCount++;   // device-activity tally for the display histogram
 
 #ifdef NETWORK_DEBUG
   logd( "Send() Cam[%d] [%s:%s:%d] %s Bytes[%d] [%s] == ", cameraNumber + 1,
