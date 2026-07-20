@@ -231,6 +231,20 @@ void camClose( int cameraNumber );
 IPAddress camRemoteIP( int cameraNumber );
 uint16_t camRemotePort( int cameraNumber );
 
+// Optional per-(camera, message-type) resend suppression. The transport layer
+// can't tell a repeatable drive command from a must-deliver inquiry/stop, so the
+// caller classifies each message: pass a CAM_MSG_* type for idempotent drive
+// commands, or CAM_MSG_NONE (the default in visca_send) for anything that must
+// always go out. camIsRepeat() checks against the last noted send WITHOUT
+// updating; camNoteSent() records it only after a successful send. Only small
+// fixed-form packets are cached -- oversized ones (e.g. signed ONVIF SOAP, which
+// also carries a fresh nonce per request) are never deduped here; ONVIF dedups
+// semantically upstream in Onvif_PtzDrive instead.
+enum CamMsgType { CAM_MSG_NONE = 0, CAM_MSG_PANTILT, CAM_MSG_ZOOM, CAM_MSG_COUNT };
+bool camIsRepeat( int cameraNumber, int msgType, const byte* data, size_t len );
+void camNoteSent( int cameraNumber, int msgType, const byte* data, size_t len );
+void camResetDedup( int cameraNumber );
+
 void Onvif_SetPreset(int presetNumber);
 void Onvif_GoToPreset(int presetNumber);
 void Onvif_PtzDrive(int, int, int);

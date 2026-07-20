@@ -16,7 +16,6 @@
 //#define VISCA_DEBUG 1
 
 byte visca_empty[256] = {};
-byte visca_previous[256] = {};
 byte visca_response[256] = {};
 
 
@@ -91,7 +90,7 @@ bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport,
 // buffer overflow become high, because of limitations of order to receive commands or execution interval of command.
 // It may cause efficiency to be reduced substantially.
 
-void visca_send(String command, byte packet[], int size, int cameraNumber, boolean waitForAck = false, boolean waitForComplete = false, byte response[] = visca_response) {
+void visca_send(String command, byte packet[], int size, int cameraNumber, boolean waitForAck = false, boolean waitForComplete = false, byte response[] = visca_response, int msgType = CAM_MSG_NONE) {
   String returnCode = "OK";
   String displayString = String(sequenceNumber) + String(" - ") + command + String(" - ");
   //byte response[256] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -110,15 +109,14 @@ void visca_send(String command, byte packet[], int size, int cameraNumber, boole
     VISCA_ERROR("E98");
   }
 
-  // Don't keep re-sending the same drive command. But NEVER suppress an inquiry
-  // (waitForAck/waitForComplete) -- it needs a fresh reply, and suppressing it
-  // would return the zeroed response above and read as CAMERA_DOWN.
-  if (!waitForAck && !waitForComplete &&
-      previousCamera == cameraNumber && 0 == memcmp(visca_previous, packet, size)) {
+  // Don't keep re-sending an identical drive command to the same camera. Dedup
+  // is per (camera, msgType) so interleaved pan/tilt and zoom don't clobber each
+  // other, and only drive commands opt in (msgType != CAM_MSG_NONE): inquiries
+  // and one-shots pass CAM_MSG_NONE so they always go out -- suppressing an
+  // inquiry would return the zeroed response above and read as CAMERA_DOWN.
+  if (msgType != CAM_MSG_NONE && camIsRepeat(cameraNumber, msgType, packet, size)) {
 #ifdef VISCA_DEBUG
-    logd("Duplicate packet on same camera: ignoring");
-    logd("previousCamera: %d cameraNumber: %d\n", previousCamera + 1, cameraNumber + 1);
-    printBytes(visca_previous, size);
+    logd("Duplicate %s packet on camera %d: ignoring", command.c_str(), cameraNumber + 1);
     printBytes(packet, size);
 #endif
     // digitalWrite(PIN_TRANSMIT, LOW);
@@ -205,7 +203,9 @@ void visca_send(String command, byte packet[], int size, int cameraNumber, boole
     }
   }
 
-  memcpy(visca_previous, packet, size);
+  // Record this send for dedup only after it succeeded (matches the old
+  // behavior: a failed send doesn't update history, so it will be retried).
+  if (msgType != CAM_MSG_NONE) camNoteSent(cameraNumber, msgType, packet, size);
   previousCamera = cameraNumber;
 
   logi("%s%s", displayString.c_str(), returnCode.c_str());
@@ -225,21 +225,21 @@ void ptzDrive(int panSpeed, int tiltSpeed, int zoomSpeed) {
       visca_pt_drive_bytes[PT_DIR1_BYTE] = 0x03;
       visca_pt_drive_bytes[PT_DIR2_BYTE] = 0x03;
       logw("Stopping pt on previous camera\n");
-      visca_send("PT-DRIVE", visca_pt_drive_bytes, sizeof(visca_pt_drive_bytes), previousCamera);
+      visca_send("PT-DRIVE", visca_pt_drive_bytes, sizeof(visca_pt_drive_bytes), previousCamera, false, false, visca_response, CAM_MSG_PANTILT);
     }
     if (!zoom_stopped) {
       visca_zoom_bytes[ZOOM_DIR_BYTE] = 0x0;
       logw("Stopping zoom on previous camera\n");
-      visca_send("ZOOM", visca_zoom_bytes, sizeof(visca_zoom_bytes), previousCamera);
+      visca_send("ZOOM", visca_zoom_bytes, sizeof(visca_zoom_bytes), previousCamera, false, false, visca_response, CAM_MSG_ZOOM);
     }
+    // Newly selected camera: clear its dedup history so the command below is
+    // always sent explicitly rather than suppressed against its stale last state.
+    camResetDedup(activeCamera);
   }
 
-  // Maybe get ridof these.. totally unnessesary and confusing
-  // Just ignore the visca command if it is a duplicate in viscaSend()
-
-  // This would be good to do but PTDrive and Zoom are two separate commands
-  // And this function sends 2 packets every time -- one for PanTilt and one for Zoom
-  // Might need to remember the last packet of each type so we don't flood
+  // ptzDrive sends two packets per call (pan/tilt + zoom). visca_send dedups each
+  // per (camera, message-type), so holding the stick steady sends each command
+  // once and then suppresses the identical repeats until the speed changes.
 
   boolean pt_stopping = false;
   boolean zoom_stopping = false;
@@ -277,7 +277,7 @@ void ptzDrive(int panSpeed, int tiltSpeed, int zoomSpeed) {
     pt_stopping = true;
   }
   if (!(pt_stopped == true && pt_stopping == true)) {
-    visca_send("PT-DRIVE", visca_pt_drive_bytes, sizeof(visca_pt_drive_bytes), activeCamera);
+    visca_send("PT-DRIVE", visca_pt_drive_bytes, sizeof(visca_pt_drive_bytes), activeCamera, false, false, visca_response, CAM_MSG_PANTILT);
   }
 
   if (zoomSpeed > 0) {
@@ -289,7 +289,7 @@ void ptzDrive(int panSpeed, int tiltSpeed, int zoomSpeed) {
     zoom_stopping = true;
   }
   if (!(zoom_stopped == true && zoom_stopping == true)) {
-    visca_send("ZOOM", visca_zoom_bytes, sizeof(visca_zoom_bytes), activeCamera);
+    visca_send("ZOOM", visca_zoom_bytes, sizeof(visca_zoom_bytes), activeCamera, false, false, visca_response, CAM_MSG_ZOOM);
   }
 
   pt_stopped = pt_stopping;

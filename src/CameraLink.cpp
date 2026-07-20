@@ -237,6 +237,40 @@ uint16_t camRemotePort( int cameraNumber ) {
   return cameras[cameraNumber].lastFromPort;
 }
 
+// --- Resend suppression ----------------------------------------------------
+// Last packet sent per (camera, message-type), so a caller can skip re-sending
+// an identical idempotent drive command. Keyed by type (not a single buffer) so
+// the interleaved pan/tilt and zoom packets don't clobber each other's history.
+#define CAM_DEDUP_MAXLEN 24
+static byte    lastSent[NUM_CAMERAS + 1][CAM_MSG_COUNT][CAM_DEDUP_MAXLEN];
+static uint8_t lastSentLen[NUM_CAMERAS + 1][CAM_MSG_COUNT];   // 0 = nothing cached
+
+static bool dedupKeyOK( int cam, int msgType, size_t len ) {
+  return cam >= 0 && cam <= NUM_CAMERAS &&
+         msgType > CAM_MSG_NONE && msgType < CAM_MSG_COUNT &&
+         len > 0 && len <= CAM_DEDUP_MAXLEN;
+}
+
+bool camIsRepeat( int cameraNumber, int msgType, const byte* data, size_t len ) {
+  if ( !dedupKeyOK( cameraNumber, msgType, len ) ) return false;  // uncacheable -> always send
+  return lastSentLen[cameraNumber][msgType] == len &&
+         0 == memcmp( lastSent[cameraNumber][msgType], data, len );
+}
+
+void camNoteSent( int cameraNumber, int msgType, const byte* data, size_t len ) {
+  if ( !dedupKeyOK( cameraNumber, msgType, len ) ) return;
+  memcpy( lastSent[cameraNumber][msgType], data, len );
+  lastSentLen[cameraNumber][msgType] = (uint8_t)len;
+}
+
+// Forget a camera's history so the next command to it is always re-sent (used
+// when the active camera changes -- a freshly selected camera should get an
+// explicit command, not be silently deduped against its stale last state).
+void camResetDedup( int cameraNumber ) {
+  if ( cameraNumber < 0 || cameraNumber > NUM_CAMERAS ) return;
+  for ( int t = 0; t < CAM_MSG_COUNT; t++ ) lastSentLen[cameraNumber][t] = 0;
+}
+
 // Read one message into packet[], never more than cap bytes. Returns the byte
 // count on success (>0), NETWORK_TIMEOUT (-1) on timeout, or NETWORK_ERROR (0)
 // on error/close. Callers that only compare against ERROR/TIMEOUT are unaffected;
