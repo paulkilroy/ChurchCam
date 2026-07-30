@@ -368,6 +368,15 @@ static void drawTallyBox(int active, int tally) {
   txt(FONT_TINY, up ? GREEN : COL_AMBER, x + 17, y + h - 5, proto);
 }
 
+// Scale an RGB565 color toward black by bright/255 (per-component, in 565 space).
+// Keep the number of distinct `bright` values small -- each one claims a slot in
+// the 256-color indexed palette.
+static uint16_t fade565(uint16_t c, uint8_t bright) {
+  uint16_t r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
+  r = r * bright / 255; g = g * bright / 255; b = b * bright / 255;
+  return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
 static void drawRadar(int pan, int tilt, int zoom, int tally) {
   uint16_t col = tally == 2 ? RED : GREEN;
   int cx = 222, cy = 88, r = 56;
@@ -378,6 +387,23 @@ static void drawRadar(int pan, int tilt, int zoom, int tally) {
   float pn = (pan  / (float)AnalogMax) * 2.0f - 1.0f;
   float tn = (tilt / (float)AnalogMax) * 2.0f - 1.0f;
   int dx = cx + (int)(pn * (r - 6)), dy = cy - (int)(tn * (r - 6));
+
+  // Light trail: a short fading tail of the last few dot positions. This traces
+  // joystick deflection, not camera aim (same caveat as the dot itself). We
+  // redraw the whole frame each tick, so persistence is done by hand from a ring
+  // buffer. Only ~6 discrete fade shades -> few palette slots.
+  static const int TRAIL_N = 8;
+  static int16_t txs[TRAIL_N], tys[TRAIL_N];
+  static uint8_t thead = 0;
+  static bool tseed = false;
+  if (!tseed) { for (int i = 0; i < TRAIL_N; i++) { txs[i] = dx; tys[i] = dy; } tseed = true; }
+  txs[thead] = dx; tys[thead] = dy; thead = (thead + 1) % TRAIL_N;   // push current
+  for (int i = 0; i < TRAIL_N; i++) {                                 // oldest -> newest
+    int idx = (thead + i) % TRAIL_N;
+    uint8_t bright = 40 + i * 26;                                     // 40..222
+    gfx->fillCircle(txs[idx], tys[idx], 1 + i / 3, fade565(col, bright));
+  }
+
   gfx->fillCircle(dx, dy, 5, col); gfx->drawCircle(dx, dy, 6, BLACK);
 
   int zx = 306, ztop = 32, zh = 110;
