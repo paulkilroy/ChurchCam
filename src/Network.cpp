@@ -338,7 +338,11 @@ static NetworkInterface& activeNet() {
   return ethUp() ? (NetworkInterface&)ETH : (NetworkInterface&)WiFi.STA;
 }
 
-const char* getHostname() { return activeNet().getHostname(); }
+// Fixed to AP_SSID so the name is consistent everywhere: the AP, the mDNS name
+// (ptz-setup.local), the DHCP hostname set on the interfaces, and the display
+// header. The interface's own getHostname() reports the MAC-derived default
+// (esp32-XXXX) even after setHostname(), which made mDNS come up as esp32-XXXX.local.
+const char* getHostname() { return AP_SSID; }
 IPAddress   localIP()     { return activeNet().localIP(); }
 IPAddress   subnetMask()  { return activeNet().subnetMask(); }
 IPAddress   gatewayIP()   { return activeNet().gatewayIP(); }
