@@ -33,11 +33,12 @@
       position: relative;
     }
     .deadZone:before {
-      margin-top: -1em;
       content: '';
       position: absolute;
+      top: 50%;
+      transform: translateY(-50%);   /* center on the slider track */
       width: 20%;
-      height: 2em;
+      height: 1.6em;
       z-index: 1;
       pointer-events: none;
       border: 5px solid lightgray;
