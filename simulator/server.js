@@ -553,6 +553,57 @@ wsd.bind(WSD_PORT, () => {
 });
 
 // ---------------------------------------------------------------------------
+// mDNS responder so the controller's MDNS.queryService("blackmagic","tcp") finds
+// the virtual ATEM (the firmware sets switcherIP from the A record and connects
+// UDP 9910). Real ATEMs advertise over Bonjour/mDNS; the service name here matches
+// what the firmware queries -- confirm it against a real ATEM when you have one.
+// NOTE: on macOS the system mDNSResponder owns :5353; reuseAddr lets us still
+// receive the multicast, but if the bind fails we just skip ATEM auto-discovery.
+// ---------------------------------------------------------------------------
+const MDNS_ADDR = '224.0.0.251', MDNS_PORT = 5353;
+const MDNS_SERVICE = '_blackmagic._tcp.local';
+const MDNS_INSTANCE = 'ATEM-Sim.' + MDNS_SERVICE;
+const MDNS_HOST = 'atem-sim.local';
+
+function dnsName(name) {                          // "a.b.local" -> length-prefixed labels + 0
+  const parts = name.split('.').filter(Boolean);
+  return Buffer.concat([...parts.map((p) => Buffer.concat([Buffer.from([p.length]), Buffer.from(p)])), Buffer.from([0])]);
+}
+function dnsRecord(name, type, rdata) {
+  const head = Buffer.alloc(10);
+  head.writeUInt16BE(type, 0);                    // type
+  head.writeUInt16BE(1, 2);                       // class IN
+  head.writeUInt32BE(120, 4);                     // TTL
+  head.writeUInt16BE(rdata.length, 8);
+  return Buffer.concat([dnsName(name), head, rdata]);
+}
+function atemMdnsResponse() {
+  const srvHead = Buffer.alloc(6);                // priority, weight, port
+  srvHead.writeUInt16BE(ATEM_PORT, 4);
+  const ptr = dnsRecord(MDNS_SERVICE, 12, dnsName(MDNS_INSTANCE));
+  const srv = dnsRecord(MDNS_INSTANCE, 33, Buffer.concat([srvHead, dnsName(MDNS_HOST)]));
+  const txt = dnsRecord(MDNS_INSTANCE, 16, Buffer.from([0]));
+  const a = dnsRecord(MDNS_HOST, 1, Buffer.from(LAN_IP.split('.').map(Number)));
+  const header = Buffer.alloc(12);
+  header.writeUInt16BE(0x8400, 2);                // response, authoritative
+  header.writeUInt16BE(1, 6);                     // 1 answer (PTR)
+  header.writeUInt16BE(3, 10);                    // 3 additional (SRV, TXT, A)
+  return Buffer.concat([header, ptr, srv, txt, a]);
+}
+
+const mdns = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+mdns.on('message', (msg) => {
+  if (msg.length < 12 || (msg.readUInt16BE(2) & 0x8000)) return;  // ignore responses (incl. ours)
+  if (!msg.includes(Buffer.from('_blackmagic'))) return;          // only our service query
+  mdns.send(atemMdnsResponse(), MDNS_PORT, MDNS_ADDR);
+});
+mdns.on('error', (e) => console.error('mdns error (ATEM auto-discovery off):', e.message));
+mdns.bind(MDNS_PORT, () => {
+  try { mdns.addMembership(MDNS_ADDR); } catch (e) { console.error('mdns membership:', e.message); }
+  console.log(`mdns : ATEM advertised at ${MDNS_SERVICE} -> ${LAN_IP}:${ATEM_PORT}`);
+});
+
+// ---------------------------------------------------------------------------
 console.log('\nLAN addresses for your ChurchCam config:');
 for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
   for (const a of addrs) if (a.family === 'IPv4' && !a.internal) console.log(`   ${name}: ${a.address}`);
