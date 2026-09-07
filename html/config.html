@@ -260,6 +260,47 @@
       dc.parentNode.replaceChild(div, dc);
     }
 
+    // Scan for nearby WiFi networks and list them by signal strength. The ESP32
+    // radio is 2.4 GHz only, so 5 GHz networks simply won't appear -- which is the
+    // point: you can't pick one it can't join. Click a row to fill the SSID field.
+    async function scanWifi(btn) {
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Scanning...";
+      const results = document.getElementById('scanResults');
+      results.innerHTML = "";
+      try {
+        const r = await fetch('/scanWifi');
+        let nets = await r.json();
+        nets.sort((a, b) => b.rssi - a.rssi);
+        const seen = new Set();                        // one row per SSID (keep strongest)
+        nets = nets.filter(n => n.ssid && !seen.has(n.ssid) && seen.add(n.ssid));
+        if (!nets.length) {
+          results.innerHTML = "<div class='list-group-item text-muted'>No 2.4 GHz networks found</div>";
+        }
+        for (const n of nets) {
+          const q = n.rssi >= -60 ? ['bg-success', 'strong']
+                  : n.rssi >= -70 ? ['bg-primary', 'good']
+                  : n.rssi >= -80 ? ['bg-warning text-dark', 'fair'] : ['bg-secondary', 'weak'];
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+          row.innerHTML = `<span>${n.secure ? '🔒 ' : ''}${n.ssid}</span>`
+            + `<span class="badge ${q[0]} rounded-pill">${n.rssi} dBm · ${q[1]}</span>`;
+          row.onclick = () => {
+            document.getElementById('networkName').value = n.ssid;
+            results.innerHTML = "";
+            document.getElementById('networkPassword').focus();
+          };
+          results.appendChild(row);
+        }
+      } catch (e) {
+        results.innerHTML = "<div class='list-group-item text-danger'>Scan failed — try again.</div>";
+      }
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+
     async function discoverCameras(btn) {
       btn.disabled = true;
       btn.innerHTML =
@@ -608,6 +649,10 @@
                   <input name="networkName" type="text" class="form-control" id="networkName" placeholder="ssid" value="%SSID%">
                   <label for="networkName">Network Name (SSID)</label>
                 </div>
+                <div class="d-grid my-2">
+                  <button type="button" id="scanBtn" class="btn btn-outline-primary btn-sm" onclick="scanWifi(this)">Scan for networks</button>
+                </div>
+                <div id="scanResults" class="list-group mb-2"></div>
                 <div class="form-floating">
                   <input name="networkPassword" type="password" class="form-control" id="networkPassword" placeholder="password" value="%PSK%">
                   <label for="networkPassword">Network Password</label>

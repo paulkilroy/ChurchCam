@@ -275,6 +275,26 @@ static esp_err_t handleErase(PsychicRequest* request, PsychicResponse* response)
   return handleRestartAndWait(request, response);
 }
 
+// Scan for nearby WiFi APs (2.4 GHz only -- the ESP32 can't see 5 GHz) and return
+// them as JSON [{ssid, rssi, secure}]. Blocking (~2-4s); called from the config AP,
+// where it briefly hops channels but the AP client reconnects. Lets the operator
+// pick an SSID from a list instead of typing one that comes back NO_AP_FOUND.
+static esp_err_t handleScanWifi(PsychicRequest* request, PsychicResponse* response) {
+  int n = WiFi.scanNetworks();
+  String json = "[";
+  for ( int i = 0; i < n; i++ ) {
+    String ssid = WiFi.SSID(i);
+    ssid.replace("\\", "\\\\");
+    ssid.replace("\"", "\\\"");
+    if ( i ) json += ",";
+    json += "{\"ssid\":\"" + ssid + "\",\"rssi\":" + String(WiFi.RSSI(i)) +
+            ",\"secure\":" + ( WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "false" : "true" ) + "}";
+  }
+  json += "]";
+  WiFi.scanDelete();
+  return response->send(200, "application/json", json.c_str());
+}
+
 static esp_err_t handleNotFound(PsychicRequest* request, PsychicResponse* response) {
   logi("web request for: %s\n", request->uri().c_str());
   return response->send(404, "text/html", "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width, initial-scale=1.0\"><title>PTZ Setup</title></head><body style=\"font-family:Verdana;\"><table bgcolor=\"#777777\"border=\"0\"width=\"100%\"cellpadding=\"1\"style=\"color:#ffffff;font-size:.8em;\"><tr><td><h1>&nbsp PTZ Setup</h1></td></tr></table><br>404 - Page not found</body></html>");
@@ -330,6 +350,7 @@ void webSetup() {
   server.on("/restart", HTTP_ANY, handleRestartAndWait);
   server.on("/logData", HTTP_GET, handleLogData);
   server.on("/erase", HTTP_GET, handleErase);
+  server.on("/scanWifi", HTTP_GET, handleScanWifi);
 
   // OTA firmware upload
   PsychicUploadHandler* updateHandler = new PsychicUploadHandler();
