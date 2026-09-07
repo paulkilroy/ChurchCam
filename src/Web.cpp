@@ -107,7 +107,7 @@ String processor(const String& var) {
       if ( s == CAMERA_OFF ) status = "off";
 
       String camName = atemSwitcher.getInputShortName(i);
-      if ( camName == "" ) camName = "Camera " + String(i);
+      if ( camName == "" ) camName = "Camera " + String(i + 1);   // 1-based, matches ATEM CAM1.. and the display
       char input[220];
       // Options for camera status
       //    -compute status from responses(?) or just last response
