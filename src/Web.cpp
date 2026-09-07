@@ -354,6 +354,17 @@ void webSetup() {
 }
 
 void webLoop() {
+  // /save, /erase and /restart set Restart from the async HTTP task; the actual
+  // reboot must happen here in loop context. (This flag previously had no consumer,
+  // so saving Wi-Fi settings persisted them to EEPROM but never rebooted -- the
+  // device kept running in its boot-time mode and never reconnected.) The short
+  // delay lets the HTTP response (the "restarting" page) flush to the browser.
+  if ( Restart ) {
+    logi("Restart requested -- rebooting to apply settings");
+    delay(400);
+    ESP.restart();
+  }
+
   // PsychicHttp serves requests in its own FreeRTOS task, so there is normally
   // nothing to poll here. The one exception: if an OTA upload dies mid-stream
   // (dropped client, network glitch), the upload callback stops firing and

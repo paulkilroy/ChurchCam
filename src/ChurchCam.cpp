@@ -34,7 +34,10 @@ bool InSimulator = false;
 // buttons on 25/26/27.
 struct Pinouts_S Pinouts[REV_MODELS]{
   //                P.  T.  Z. B1. B2. B3 LED RST SLC SDA
-  { "OLIMEX POE",  33, 35, 36, 32, 14,  5,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
+  //  B1/B2/B3 = override / recall1 / recall2. recall1=16 (free GPIO), recall2=34
+  //  (input-only -> needs an external ~10k pull-up to 3V3). Both moved off the
+  //  display's CS(14) and clock, which they used to collide with.
+  { "OLIMEX POE",  33, 35, 36, 32, 16, 34,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
   { "Simulator",   34, 35, 32, 25, 26, 27,  2, 255, 22, 21 },
   // ADC notes (ESP32): ADC2 does NOT work while WiFi is on. ADC1 = GPIO32-39,
   // ADC2 = GPIO0,2,4,12-15,25-27. INPUT_PULLUP works on 14,16-19,21-23,25-27.

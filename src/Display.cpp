@@ -71,14 +71,16 @@ const uint8_t cam_bits[] = {
   0x03, 0x60, 0x07, 0xff, 0x7f, 0x06, 0xfe, 0x3f, 0x00
 };
 
-#define TFT_CS    14 // CS Grey 
-#define TFT_RST   4 // RES Dark Brown 
-#define TFT_DC    15 // RS Blue
-
-#define TFT_SCLK 5   // SCK White -- Baord says 18
-#define TFT_MOSI 13  // SDA Light Brown -- Board says 23
-
-#define TFT_BLK 2 // Backlit - Purple
+// Display SPI on the ESP32's native HSPI (SPI2) pins -- CLK 14 / MOSI 13 / CS 15
+// -- so the bus uses the IOMUX fast path + DMA. Chosen to be the obvious, correct
+// layout for anyone new to the board. DC reuses GPIO5 (the old software clock pin,
+// now free). RST/BL are plain GPIOs. Both remotes wire to this map.
+#define TFT_SCLK 14  // HSPI native clock (was 5)
+#define TFT_MOSI 13  // HSPI native data
+#define TFT_CS   15  // HSPI native chip-select (was 14)
+#define TFT_DC    5  // data/command -- reuses the freed clock pin (was 15)
+#define TFT_RST   4  // reset
+#define TFT_BLK   2  // backlight
 
 
 #define GFX_BL TFT_BLK // default backlight pin, you may replace DF_GFX_BL to actual backlight pin
@@ -91,7 +93,10 @@ Arduino_GFX *gfx = create_default_Arduino_GFX();
 /* More data bus class: https://github.com/moononournation/Arduino_GFX/wiki/Data-Bus-Class */
 //Arduino_DataBus *bus = create_default_Arduino_DataBus();
 //Arduino_DataBus *bus = new Arduino_SWSPI(TFT_DC /* DC */, TFT_CS/* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */);
-Arduino_DataBus *bus = new Arduino_HWSPI(TFT_DC /* DC */, TFT_CS/* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */);
+// Arduino_ESP32SPI on the HSPI (SPI2) peripheral: with SCK/MOSI/CS on 14/13/15 it
+// takes the IOMUX fast path and DMAs the frame out (vs. the CPU-driven HWSPI). No
+// MISO -- the display is write-only (and HSPI's native MISO, GPIO12, is Eth power).
+Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC /* DC */, TFT_CS /* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* SPI2 -> native 12-15 */);
 /* More display class: https://github.com/moononournation/Arduino_GFX/wiki/Display-Class */
 // Arduino_GFX *gfx = new Arduino_ILI9341(bus, DF_GFX_RST, 0 /* rotation */, false /* IPS */);
 Arduino_GFX *gfx;
