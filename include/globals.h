@@ -171,6 +171,7 @@ void notePreset(int num, bool isSet);        // latch a preset recall/save for t
 extern volatile bool g_otaActive;            // firmware update in progress (display shows the OTA screen)
 extern volatile uint32_t g_otaBytes;         // bytes written so far during OTA
 extern volatile uint32_t g_otaLastChunk;     // millis() of the last received OTA chunk (stuck detection)
+extern volatile bool g_calibrateCenter;      // set by the web task; the control loop captures the joystick's resting center into settings.*Mid
 struct LogItem getLogItem(uint8_t i);
 void cameraControlLoop();
 void cameraControlSetup();

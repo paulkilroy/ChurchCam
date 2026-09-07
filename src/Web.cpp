@@ -39,6 +39,7 @@ bool Restart = false;
 volatile bool g_otaActive = false;      // set while an OTA upload is streaming (display OTA screen)
 volatile uint32_t g_otaBytes = 0;
 volatile uint32_t g_otaLastChunk = 0;   // millis() of the last chunk, for stuck-upload detection
+volatile bool g_calibrateCenter = false;   // request: capture joystick rest center (done in the control loop)
 
 String processor(const String& var) {
   String serverVars = "";
@@ -134,6 +135,9 @@ String processor(const String& var) {
   else if ( var == "ATEM_IP_ADDR" ) return settings.switcherIP.toString();
   else if ( var == "SSID" ) return getSSID();
   else if ( var == "PSK" ) return getPSK();
+  else if ( var == "PAN_MID" )  return String(settings.panMid);
+  else if ( var == "TILT_MID" ) return String(settings.tiltMid);
+  else if ( var == "ZOOM_MID" ) return String(settings.zoomMid);
   else if ( var == "BOARD_NAME" ) return Pinouts[HWRev].name;
   else if ( var == "RESTART_MSG" ) return RestartMsg;
   // Discovered cameras start empty on page load; the list is filled client-side
@@ -295,6 +299,18 @@ static esp_err_t handleScanWifi(PsychicRequest* request, PsychicResponse* respon
   return response->send(200, "application/json", json.c_str());
 }
 
+// Recalibrate the joystick's resting center. The control loop (which owns the ADC)
+// does the capture; we flag it, wait for it to clear, then return the new centers.
+static esp_err_t handleCalibrateCenter(PsychicRequest* request, PsychicResponse* response) {
+  g_calibrateCenter = true;
+  uint32_t t0 = millis();
+  while ( g_calibrateCenter && millis() - t0 < 800 ) delay(10);
+  char json[96];
+  snprintf(json, sizeof json, "{\"panMid\":%u,\"tiltMid\":%u,\"zoomMid\":%u}",
+           settings.panMid, settings.tiltMid, settings.zoomMid);
+  return response->send(200, "application/json", json);
+}
+
 static esp_err_t handleNotFound(PsychicRequest* request, PsychicResponse* response) {
   logi("web request for: %s\n", request->uri().c_str());
   return response->send(404, "text/html", "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width, initial-scale=1.0\"><title>PTZ Setup</title></head><body style=\"font-family:Verdana;\"><table bgcolor=\"#777777\"border=\"0\"width=\"100%\"cellpadding=\"1\"style=\"color:#ffffff;font-size:.8em;\"><tr><td><h1>&nbsp PTZ Setup</h1></td></tr></table><br>404 - Page not found</body></html>");
@@ -351,6 +367,7 @@ void webSetup() {
   server.on("/logData", HTTP_GET, handleLogData);
   server.on("/erase", HTTP_GET, handleErase);
   server.on("/scanWifi", HTTP_GET, handleScanWifi);
+  server.on("/calibrateCenter", HTTP_GET, handleCalibrateCenter);
 
   // OTA firmware upload
   PsychicUploadHandler* updateHandler = new PsychicUploadHandler();

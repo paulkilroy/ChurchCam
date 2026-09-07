@@ -23,25 +23,25 @@
   <!-- https://stackoverflow.com/questions/55493629/rectangular-shape-behind-text-in-css -->
   <style>
     .nodisplay { display:none;}
-    #joystickContainer {
+    .joystickContainer {
       text-align: center;
     }
 
-    /*
-    #joystickDeadZone {
+    /* Deadzone box: 20% wide (THRESHOLD .1 either side), centered on the calibrated
+       rest position via --center (default 50%), positioned relative to the axis bar. */
+    .deadZone {
+      position: relative;
     }
-    */
-
-    #joystickDeadZone:before {
+    .deadZone:before {
       margin-top: -1em;
       content: '';
       position: absolute;
-      width: calc(100%*.2);
+      width: 20%;
       height: 2em;
-      margin: auto;
       z-index: 1;
+      pointer-events: none;
       border: 5px solid lightgray;
-      left: calc((100% / 2 - 0px) - (100% * .2 / 2 - 0px));
+      left: calc(var(--center, 50%) - 10%);
     }
   </style>
   <script defer src="bootstrap.bundle.min.js"></script>
@@ -301,6 +301,42 @@
       btn.innerHTML = orig;
     }
 
+    // Calibrated joystick rest centers (raw ADC, 0-4096). parseInt tolerates the
+    // template var not being substituted (e.g. file:// preview) -> falls back to mid.
+    var deadzoneCenters = {
+      pan:  parseInt("%PAN_MID%")  || 2048,
+      tilt: parseInt("%TILT_MID%") || 2048,
+      zoom: parseInt("%ZOOM_MID%") || 2048
+    };
+    function positionDeadzones() {
+      var place = function (id, mid) {
+        var el = document.getElementById(id);
+        if (el) el.style.setProperty('--center', (mid / 4096 * 100) + '%');
+      };
+      place('deadZonePan', deadzoneCenters.pan);
+      place('deadZoneTilt', deadzoneCenters.tilt);
+      place('deadZoneZoom', deadzoneCenters.zoom);
+    }
+    // Center the stick, click -> firmware captures the resting position as the new
+    // deadzone center, saves it, and the boxes jump to match.
+    async function recalibrateCenter(btn) {
+      var orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Calibrating...";
+      var out = document.getElementById('calibResult');
+      try {
+        var r = await fetch('/calibrateCenter');
+        var c = await r.json();
+        deadzoneCenters = { pan: c.panMid, tilt: c.tiltMid, zoom: c.zoomMid };
+        positionDeadzones();
+        out.innerHTML = "Center set - pan " + c.panMid + ", tilt " + c.tiltMid + ", zoom " + c.zoomMid;
+      } catch (e) {
+        out.innerHTML = "Calibration failed - try again.";
+      }
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+
     async function discoverCameras(btn) {
       btn.disabled = true;
       btn.innerHTML =
@@ -343,6 +379,7 @@
       if (ptzSocket) ptzSocket.close();
     }
     function setupPTZSocket() {
+      positionDeadzones();   // place the deadzone boxes at the calibrated centers
       if (location.protocol != "file:") {
         console.log("connecting to ws://" + location.host + "/ws");
         ptzSocket = new WebSocket("ws://" + location.host + "/ws");
@@ -815,8 +852,8 @@
                     <div class="col-3">Visca:</div>
                     <div id="panVisca" class="col-3"></div>
                   </div>
-                  <div id="joystickContainer">
-                    <div id="joystickDeadZone">
+                  <div class="joystickContainer">
+                    <div class="deadZone" id="deadZonePan">
                       <input id="axisPan" type="range" class="form-range align-bottom" min="0" max="4096">
                     </div>
                   </div>
@@ -826,8 +863,8 @@
                     <div class="col-3">Visca:</div>
                     <div id="tiltVisca" class="col-3"></div>
                   </div>
-                  <div id="joystickContainer">
-                    <div id="joystickDeadZone">
+                  <div class="joystickContainer">
+                    <div class="deadZone" id="deadZoneTilt">
                       <input id="axisTilt" type="range" class="form-range align-bottom" min="0" max="4096">
                     </div>
                   </div>
@@ -837,15 +874,21 @@
                     <div class="col-3">Visca:</div>
                     <div id="zoomVisca" class="col-3"></div>
                   </div>
-                  <div id="joystickContainer">
-                    <div id="joystickDeadZone">
+                  <div class="joystickContainer">
+                    <div class="deadZone" id="deadZoneZoom">
                       <input id="axisZoom" type="range" class="form-range align-bottom" min="0" max="4096">
                     </div>
                   </div>
                 </span>
               </div>
-              <!-- Restart Button -->
+              <!-- Recalibrate center: center the stick, then click -->
               <div class="row">
+                <button type="button" class="btn btn-outline-primary btn-lg btn-block" onclick="recalibrateCenter(this)">
+                  Recalibrate Center</button>
+                <div id="calibResult" class="text-muted small mt-2 text-center"></div>
+              </div>
+              <!-- Restart Button -->
+              <div class="row mt-3">
                 <button type="button" class="btn btn-success btn-lg btn-block"
                   onclick="location.href='/restart';">Restart Joystick</button>
               </div>

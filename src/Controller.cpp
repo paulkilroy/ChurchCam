@@ -206,6 +206,19 @@ void cameraControlLoop() {
   int tilt = analogRead(PIN_TILT);
   int zoom = analogRead(PIN_ZOOM);
 
+  // Joystick center recalibration (config page "Recalibrate center"). Done here in
+  // loop context because this task owns the ADC. Capture the resting position as
+  // the new deadzone center; the trim screws set it at build time, this handles
+  // drift. Averaged to shed ADC noise, then persisted.
+  if ( g_calibrateCenter ) {
+    long p = 0, t = 0, z = 0;
+    for ( int i = 0; i < 16; i++ ) { p += analogRead(PIN_PAN); t += analogRead(PIN_TILT); z += analogRead(PIN_ZOOM); delay(3); }
+    settings.panMid = p / 16; settings.tiltMid = t / 16; settings.zoomMid = z / 16;
+    if ( !InSimulator ) { EEPROM.put(0, settings); EEPROM.commit(); }
+    logi("Joystick center calibrated: pan=%u tilt=%u zoom=%u", settings.panMid, settings.tiltMid, settings.zoomMid);
+    g_calibrateCenter = false;
+  }
+
   // if inDeadZone( pan ) then pan = 0; same for tilt and zoom
 
   // if camera changed since previous message send, stop PT and Zoom on previous camera
@@ -219,10 +232,12 @@ void cameraControlLoop() {
   // check for zoom stop -- send zoom stop - always ASAP
   // otherwise send zoom command - if SendTimer has elapsed
 
-  // move this translate code to visca and in ONVIF just divide by AnalogMax
-  int panSpeed = mapOffset(pan, 0, AnalogMax/2, AnalogMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
-  int tiltSpeed = -1*mapOffset(tilt, 0, AnalogMax/2, AnalogMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
-  int zoomSpeed = mapOffset(zoom, 0, AnalogMax/2, AnalogMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
+  // Deadzone/speed mapping is centered on the calibrated rest position
+  // (settings.*Mid, defaults to AnalogMax/2), not a hardcoded midpoint -- so a
+  // stick that rests off-center doesn't read as a constant drive.
+  int panSpeed = mapOffset(pan, 0, settings.panMid, AnalogMax, -PAN_SPEED_MAX, PAN_SPEED_MAX);
+  int tiltSpeed = -1*mapOffset(tilt, 0, settings.tiltMid, AnalogMax, -TILT_SPEED_MAX, TILT_SPEED_MAX);
+  int zoomSpeed = mapOffset(zoom, 0, settings.zoomMid, AnalogMax, -ZOOM_SPEED_MAX, ZOOM_SPEED_MAX);
 
   bool idle = ( panSpeed == 0 && tiltSpeed == 0 && zoomSpeed == 0 );
 
