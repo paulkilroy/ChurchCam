@@ -1,69 +1,69 @@
 <html>
+
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        h1 {
-            font-family: "Roboto", Arial, Helvetica, sans-serif;
-            font-weight: 400;
-            margin-left: 1em
-        }
+        body { font-family: "Roboto", Arial, Helvetica, sans-serif; color: #222; margin: 0; padding: 2em 1.5em; }
+        h1 { font-weight: 400; font-size: 1.4em; margin: 0; }
+        .row { display: flex; align-items: center; gap: 1em; }
+        .sub { color: #666; font-size: .95em; margin-top: .3em; }
         .loader {
-            border: 16px solid #f3f3f3;
-            border-radius: 50%;
-            border-top: 16px solid #0D6EFD;
-            width: 40px;
-            height: 40px;
-            -webkit-animation: spin 2s linear infinite;
-            animation: spin 2s linear infinite;
+            border: 8px solid #f3f3f3; border-radius: 50%; border-top: 8px solid #0D6EFD;
+            width: 34px; height: 34px; flex: none;
+            -webkit-animation: spin 1.5s linear infinite; animation: spin 1.5s linear infinite;
         }
-
-        @-webkit-keyframes spin {
-            0% {
-                -webkit-transform: rotate(0deg);
-            }
-
-            100% {
-                -webkit-transform: rotate(360deg);
-            }
+        @-webkit-keyframes spin { 0% { -webkit-transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); } }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #moved {
+            display: none; margin-top: 1.6em; padding: 1.2em 1.4em;
+            background: #fff8e6; border: 1px solid #f0d68a; border-radius: 10px; max-width: 34em;
         }
-
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
-        }
+        #moved h2 { font-size: 1.1em; font-weight: 500; margin: 0 0 .5em; }
+        #moved p { margin: .4em 0; line-height: 1.5; }
+        #moved a { color: #0D6EFD; font-weight: 500; }
+        code { background: #eee; padding: 1px 5px; border-radius: 4px; }
     </style>
     <script>
+        var pings = 0;
         if (location.protocol != "file:") {
-            keepPinging = true;
+            var keepPinging = true;
             var http = new XMLHttpRequest();
-            http.addEventListener('load', (event) => { keepPinging = false;clearInterval(callback); console.log('got it'); window.location.href = '/?success=%RESTART_MSG%'; });
-            http.addEventListener('error', (event) => { console.log('still waiting'); });
-            callback = setInterval(function () {
-                if( keepPinging ) {
-                    http.open('GET', '/ping');
-                    http.send();
-                }
+            http.addEventListener('load', function () {
+                keepPinging = false; clearInterval(callback);
+                window.location.href = '/?success=%RESTART_MSG%';
+            });
+            http.addEventListener('error', function () { /* device not back on THIS network yet */ });
+            var callback = setInterval(function () {
+                if (!keepPinging) return;
+                pings++;
+                // If it hasn't answered after ~9s, a Wi-Fi change most likely moved it off
+                // this hotspot onto your network -- surface how to find it there.
+                if (pings === 9) document.getElementById('moved').style.display = 'block';
+                http.open('GET', '/ping'); http.send();
             }, 1000);
         }
     </script>
 </head>
 
 <body>
-    <table>
-        <tr>
-            <td>
-                <div class='loader'></div>
-            </td>
-            <td>
-                <h1>%RESTART_MSG%</h1>
-                <h1>Waiting for restart...</h1>
-            </td>
-        </tr>
-    </table>
+    <div class="row">
+        <div class="loader"></div>
+        <div>
+            <h1>%RESTART_MSG%</h1>
+            <div class="sub">Restarting the controller...</div>
+        </div>
+    </div>
+
+    <div id="moved">
+        <h2>Changed the Wi-Fi network?</h2>
+        <p>If you just set a new Wi-Fi network, the controller has <b>left the <code>ptz-setup</code> hotspot</b>
+           and joined it &mdash; so this page can't reach it here anymore. That's expected.</p>
+        <p>To get back in:</p>
+        <p>1. Reconnect this phone/laptop to your normal Wi-Fi.<br>
+           2. Open <a href="http://ptz-setup.local/">http://ptz-setup.local</a> &mdash;
+           or type the <b>IP address shown on the controller's screen</b> into your browser.</p>
+        <p class="sub">If you only changed camera or ATEM settings, no need &mdash; it'll reconnect here on its own.</p>
+    </div>
 </body>
+
 </html>
