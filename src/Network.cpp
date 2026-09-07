@@ -18,6 +18,12 @@ static const char* servicesReason = "startup";
 // actually started in loop context (networkServicesLoop) -- calling WiFi.softAP()
 // from inside the event callback logs "Starting AP" but doesn't reliably broadcast.
 static volatile bool startApRequested = false;
+// The ESP32 often needs a few tries to associate (a transient AUTH_EXPIRE on the
+// first attempt is common even with the right password). Retry a handful of times
+// -- via a fresh WiFi.begin() in loop context -- before giving up to the config AP.
+static volatile bool wifiRetryRequested = false;
+static uint8_t wifiAttempts = 0;
+#define MAX_WIFI_ATTEMPTS 5
 
 static void requestNetworkServices(const char* reason) {
   servicesReason = reason;
@@ -130,6 +136,13 @@ void networkSetup(const char info[]) {
 // context, after the event callback has signalled connectivity — keeping the
 // non-thread-safe begin()/connect()/mDNS work off the WiFi/Ethernet event task.
 void networkServicesLoop() {
+  // Retry the WiFi association here (loop context) when the event task asked for it.
+  if (wifiRetryRequested) {
+    wifiRetryRequested = false;
+    logi("Retrying WiFi connect to [%s]", getSSID().c_str());
+    WiFi.begin(getSSID().c_str(), getPSK().c_str());
+  }
+
   // Start the config AP here (loop context) when the WiFi event task asked for it.
   if (startApRequested) {
     startApRequested = false;
@@ -207,9 +220,13 @@ void wifiEventCallback(WiFiEvent_t event) {
           logi("WIFI_STA_DISCONNECT-1: WiFi was connected so waiting for a reconnect, do not go into AP mode");
         } else if (ethUp()) {
           logi("WIFI_STA_DISCONNECT-2 - ETH is UP, No need for AP");
+        } else if (++wifiAttempts < MAX_WIFI_ATTEMPTS) {
+          // Transient failure -- retry (loop context does the WiFi.begin) before AP.
+          logi("WIFI_STA_DISCONNECT - attempt %d/%d failed, retrying", wifiAttempts, MAX_WIFI_ATTEMPTS);
+          wifiRetryRequested = true;
         } else {
-          // Can't start the AP here (event task) -- flag it for loop context.
-          logi("WIFI_STA_DISCONNECT-3 - requesting config AP [%s]", AP_SSID);
+          // Out of retries -- flag the config AP for loop context (can't start here).
+          logi("WIFI_STA_DISCONNECT-3 - %d attempts failed, requesting config AP [%s]", wifiAttempts, AP_SSID);
           startApRequested = true;
         }
         break;
@@ -221,6 +238,7 @@ void wifiEventCallback(WiFiEvent_t event) {
       // Needed? WiFi.mode(WIFI_STA);  // Disable softAP if connection is successful
       requestNetworkServices("WIFI_STA_GOT_IP");
       WiFiWorked = true;
+      wifiAttempts = 0;
       break;
     case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:
       logi("%d WIFI_AP_STAIPASSIGNED", WiFi.getStatusBits());
