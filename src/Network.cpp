@@ -14,6 +14,10 @@ bool WiFiWorked = false;
 static volatile bool servicesRequested = false;
 static bool servicesStarted = false;
 static const char* servicesReason = "startup";
+// Set from the WiFi event task when STA fails and we need the config AP. The AP is
+// actually started in loop context (networkServicesLoop) -- calling WiFi.softAP()
+// from inside the event callback logs "Starting AP" but doesn't reliably broadcast.
+static volatile bool startApRequested = false;
 
 static void requestNetworkServices(const char* reason) {
   servicesReason = reason;
@@ -126,6 +130,14 @@ void networkSetup(const char info[]) {
 // context, after the event callback has signalled connectivity — keeping the
 // non-thread-safe begin()/connect()/mDNS work off the WiFi/Ethernet event task.
 void networkServicesLoop() {
+  // Start the config AP here (loop context) when the WiFi event task asked for it.
+  if (startApRequested) {
+    startApRequested = false;
+    logi("Starting config AP: %s", AP_SSID);
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(AP_SSID);
+  }
+
   if (!servicesRequested || servicesStarted) return;
   servicesStarted = true;
   logi("Starting network services (%s)", servicesReason);
@@ -196,12 +208,10 @@ void wifiEventCallback(WiFiEvent_t event) {
         } else if (ethUp()) {
           logi("WIFI_STA_DISCONNECT-2 - ETH is UP, No need for AP");
         } else {
-          logi("WIFI_STA_DISCONNECT-3 - Starting AP");
-          // PSK SIM dnsServer.start(53, "*", WiFi.softAPIP());
-          Serial.printf("WIFI_STA_DISCONNECT - AP Mode - SSID for web config: [%s]\n", AP_SSID);
-          WiFi.softAP(AP_SSID);
-          WiFi.mode(WIFI_AP);  // Enable softAP to access web interface in case of no WiFi
-        } 
+          // Can't start the AP here (event task) -- flag it for loop context.
+          logi("WIFI_STA_DISCONNECT-3 - requesting config AP [%s]", AP_SSID);
+          startApRequested = true;
+        }
         break;
       }
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:

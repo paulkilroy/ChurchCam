@@ -57,7 +57,8 @@ void cameraControlSetup() {
   pinMode(PIN_TILT, INPUT);
   pinMode(PIN_ZOOM, INPUT);
   pinMode(PIN_RECALL_1, INPUT_PULLUP);
-  pinMode(PIN_RECALL_2, INPUT_PULLUP);
+  pinMode(PIN_RECALL_2, INPUT);        // GPIO34 is input-only (no internal pull-up);
+                                       // the Olimex board already has a 10k pull-up on it.
   pinMode(PIN_OVERRIDE, INPUT_PULLUP);
 
   // The camStatusCache array initializer only sets element [0]; seed the rest to
