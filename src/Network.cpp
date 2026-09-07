@@ -18,10 +18,11 @@ static const char* servicesReason = "startup";
 // actually started in loop context (networkServicesLoop) -- calling WiFi.softAP()
 // from inside the event callback logs "Starting AP" but doesn't reliably broadcast.
 static volatile bool startApRequested = false;
-// The ESP32 often needs a few tries to associate (a transient AUTH_EXPIRE on the
-// first attempt is common even with the right password). Retry a handful of times
-// -- via a fresh WiFi.begin() in loop context -- before giving up to the config AP.
-static volatile bool wifiRetryRequested = false;
+// The ESP32 often needs a few tries to associate (a transient NO_AP_FOUND /
+// AUTH_EXPIRE on the first attempt is common even with the right password). The
+// radio's own auto-reconnect (setAutoReconnect(true)) does the retrying; we just
+// count the failed attempts and hold off the config-AP fallback until enough have
+// failed that it's clearly not transient.
 static uint8_t wifiAttempts = 0;
 #define MAX_WIFI_ATTEMPTS 5
 
@@ -136,13 +137,6 @@ void networkSetup(const char info[]) {
 // context, after the event callback has signalled connectivity — keeping the
 // non-thread-safe begin()/connect()/mDNS work off the WiFi/Ethernet event task.
 void networkServicesLoop() {
-  // Retry the WiFi association here (loop context) when the event task asked for it.
-  if (wifiRetryRequested) {
-    wifiRetryRequested = false;
-    logi("Retrying WiFi connect to [%s]", getSSID().c_str());
-    WiFi.begin(getSSID().c_str(), getPSK().c_str());
-  }
-
   // Start the config AP here (loop context) when the WiFi event task asked for it.
   if (startApRequested) {
     startApRequested = false;
@@ -221,9 +215,8 @@ void wifiEventCallback(WiFiEvent_t event) {
         } else if (ethUp()) {
           logi("WIFI_STA_DISCONNECT-2 - ETH is UP, No need for AP");
         } else if (++wifiAttempts < MAX_WIFI_ATTEMPTS) {
-          // Transient failure -- retry (loop context does the WiFi.begin) before AP.
+          // Transient failure -- let the radio's auto-reconnect retry before AP.
           logi("WIFI_STA_DISCONNECT - attempt %d/%d failed, retrying", wifiAttempts, MAX_WIFI_ATTEMPTS);
-          wifiRetryRequested = true;
         } else {
           // Out of retries -- flag the config AP for loop context (can't start here).
           logi("WIFI_STA_DISCONNECT-3 - %d attempts failed, requesting config AP [%s]", wifiAttempts, AP_SSID);
