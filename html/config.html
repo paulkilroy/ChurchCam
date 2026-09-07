@@ -226,19 +226,25 @@
       div.id = "discoveredCameras";
 
       for (let i = 0; i < DiscoveredCameras.length; i++) {
+        const cam = DiscoveredCameras[i];
+        const typeStr = (cam.type == 1 ? "ONVIF" : "VISCA") + " " + (cam.transport == 1 ? "TCP" : "UDP");
         let ig = document.createElement("div");
         div.appendChild(ig);
         ig.className = "input-group mb-3";
         let dcName = document.createElement("span");
         ig.appendChild(dcName);
-        dcName.className = "input-group-text col-4";
-        dcName.id = "discovedCam0Name";
-        dcName.innerHTML = DiscoveredCameras[i].name;
+        dcName.className = "input-group-text col-3";
+        dcName.id = "discovedCam" + i + "Name";
+        dcName.innerHTML = cam.name;
+        let dcType = document.createElement("span");
+        ig.appendChild(dcType);
+        dcType.className = "input-group-text col-2";
+        dcType.innerHTML = typeStr;
         let dcIP = document.createElement("span");
         ig.appendChild(dcIP);
-        dcIP.className = "input-group-text col-4";
-        dcIP.id = "discovedCam0IP";
-        dcIP.innerHTML = DiscoveredCameras[i].ip;
+        dcIP.className = "input-group-text col-3";
+        dcIP.id = "discovedCam" + i + "IP";
+        dcIP.innerHTML = cam.ip + ":" + cam.port;
         let dcSelect = document.createElement("select");
         ig.appendChild(dcSelect);
         dcSelect.className = "form-select col-4";

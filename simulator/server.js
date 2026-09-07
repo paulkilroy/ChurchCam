@@ -134,7 +134,7 @@ function viscaDiscoveryReply(view) {
     Buffer.from([0x02]),
     Buffer.from(`MODEL:SIM-VISCA`), Buffer.from([0xff]),
     Buffer.from(`IPADR:${LAN_IP}`), Buffer.from([0xff]),
-    Buffer.from(`NAME:Camera ${view.id + 1}`), Buffer.from([0xff]),
+    Buffer.from(`NAME:Camera${view.id + 1}`), Buffer.from([0xff]),   // no space: ONVIF scope names can't hold one, so match
     Buffer.from([0x03]),
   ]);
 }
