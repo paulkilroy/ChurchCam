@@ -54,7 +54,7 @@
 // EEPROM settings header. Bump SETTINGS_VERSION on any Settings layout change so
 // old/blank EEPROM is detected and reset to defaults instead of read as garbage.
 #define SETTINGS_MAGIC   0x43436D31u  // "CCm1"
-#define SETTINGS_VERSION 3            // v2: NUM_CAMERAS 20->8; v3: per-camera ONVIF user/pass
+#define SETTINGS_VERSION 4            // v2: NUM_CAMERAS 20->8; v3: ONVIF user/pass; v4: ssid[33]/psk[64]
 
 #define BOARD_NAME Pinouts[HWRev].name       // Board
 #define PIN_TILT Pinouts[HWRev].tilt         // Yellow
@@ -88,8 +88,8 @@ struct Settings {
   uint32_t magic;    // SETTINGS_MAGIC + SETTINGS_VERSION validate the EEPROM blob
   uint16_t version;
 
-  char ssid[32];
-  char psk[32];
+  char ssid[33];   // WiFi SSID: up to 32 chars + NUL
+  char psk[64];    // WPA passphrase: up to 63 chars + NUL (was 32 -> truncated long passwords into AUTH_EXPIRE)
 
   bool staticIP;
   IPAddress staticIPAddr;
