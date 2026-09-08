@@ -43,7 +43,7 @@ bool button2Override = false;
 static int      camStatusCache[NUM_CAMERAS];
 static int      camPollIdx = 0;
 static uint32_t lastStatusPollAt = 0;
-#define STATUS_POLL_INTERVAL_MS 300
+#define STATUS_POLL_INTERVAL_MS 1000  // one camera per tick; full 8-slot sweep ~8s
 
 void cameraControlSetup() {
   analogReadResolution(ANALOG_RESOLUTION);  // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.

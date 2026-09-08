@@ -16,7 +16,10 @@
 #include <errno.h>
 #include <fcntl.h>
 
-#define NETWORK_DEBUG 1
+// Per-packet Send()/Recv() hex dumps. Off by default: the idle status poller
+// sends a VISCA PWR_INQ + two ONVIF probes every cycle, so leaving this on floods
+// the serial log continuously. Uncomment to trace on-wire bytes while debugging.
+// #define NETWORK_DEBUG 1
 
 // Bounded, non-blocking-ish behaviour so a slow or dead camera can never freeze
 // the main loop for seconds.
