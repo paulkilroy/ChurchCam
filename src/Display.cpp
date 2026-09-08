@@ -186,11 +186,12 @@ void displaySetup() {
   Arduino_GFX *gfx_chip = new Arduino_ILI9341(bus, TFT_RST /* RST */, 3 /* rotation */, false /* IPS */);
   gfx = new Arduino_Canvas_Indexed(320 /* width */, 240 /* height */, gfx_chip, 0, 0, 0);
 
-  // Init Display. 80MHz SPI: the full-frame blit is ~15ms vs ~31ms at the 40MHz
-  // default, which halves the tearing window (the panel has no TE pin to sync to
-  // -- see below). If the ribbon can't hold 80MHz (visible corruption/snow), drop
-  // this to 60000000.
-  if (!gfx->begin(80000000)) {
+  // Init Display. Faster SPI shortens the full-frame blit (~31ms at the 40MHz
+  // default) and with it the tearing window -- the panel has no TE pin to sync to
+  // (see below). 80MHz corrupted the image over this ribbon (jiggly/shifting
+  // rows), so run 60MHz (~20ms blit). If 60 still shows artifacts, drop to
+  // 40000000 -- back to the original clock, relying on flushIfChanged() alone.
+  if (!gfx->begin(60000000)) {
     Serial.println("gfx->begin() failed!");
   }
   gfx->setTextWrap(false);
