@@ -99,7 +99,8 @@ Arduino_GFX *gfx = create_default_Arduino_GFX();
 Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC /* DC */, TFT_CS /* CS */, TFT_SCLK /* SCK */, TFT_MOSI /* MOSI */, GFX_NOT_DEFINED /* MISO */, HSPI /* SPI2 -> native 12-15 */);
 /* More display class: https://github.com/moononournation/Arduino_GFX/wiki/Display-Class */
 // Arduino_GFX *gfx = new Arduino_ILI9341(bus, DF_GFX_RST, 0 /* rotation */, false /* IPS */);
-Arduino_GFX *gfx;
+Arduino_GFX *gfx;              // the double-buffered indexed canvas we draw into
+Arduino_GFX *g_panel;         // the raw ILI9341 behind it, for partial (sub-region) blits
 
 double pi = PI;
 #define arcRadius 80
@@ -183,8 +184,8 @@ void displaySetup() {
   // draws into the Arduino_Canvas_Indexed framebuffer and flush()es one frame to
   // the panel. A direct (un-buffered) panel here flickers, because every frame
   // starts with fillScreen(BLACK) on the live display.
-  Arduino_GFX *gfx_chip = new Arduino_ILI9341(bus, TFT_RST /* RST */, 3 /* rotation */, false /* IPS */);
-  gfx = new Arduino_Canvas_Indexed(320 /* width */, 240 /* height */, gfx_chip, 0, 0, 0);
+  g_panel = new Arduino_ILI9341(bus, TFT_RST /* RST */, 3 /* rotation */, false /* IPS */);
+  gfx = new Arduino_Canvas_Indexed(320 /* width */, 240 /* height */, g_panel, 0, 0, 0);
 
   // Init Display. Faster SPI shortens the full-frame blit (~31ms at the 40MHz
   // default) and with it the tearing window -- the panel has no TE pin to sync to
@@ -282,9 +283,23 @@ static void frameRR(int x, int y, int w, int h, int r, uint16_t c, int t) {
 }
 
 // Signal strength: WiFi RSSI as 0-4 bars; Ethernet shows the wired glyph.
+// RSSI feeds both the signal bars and the dB readout, and it swings several dB
+// read-to-read -- so a raw +/-5dB dead zone sits right at the noise floor and
+// flip-flops (that was the residual header flicker). Fix: low-pass the reads
+// (EMA), then apply the dead zone to the smoothed value -- the shown number only
+// moves on a genuine >=5dB signal shift, and holds otherwise.
+static int stableRSSI() {
+  static float ema = 0.0f;
+  static int shown = 0;
+  int raw = (int)WiFi.RSSI();
+  ema = (ema == 0.0f) ? raw : ema + (raw - ema) * 0.1f;   // ~0.2s time constant
+  if ( shown == 0 || abs((int)ema - shown) >= 5 ) shown = (int)ema;   // +/-5dB dead zone
+  return shown;
+}
+
 static void drawSignal(int x, int y) {
   if ( ethUp() ) { gfx->drawXBitmap(x, y, eth_bits, eth_width, eth_height, WHITE); return; }
-  int rssi = WiFi.RSSI();
+  int rssi = stableRSSI();
   int lvl = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -72 ? 2 : rssi >= -82 ? 1 : 0;
   for ( int i = 0; i < 4; i++ ) {
     int bh = 3 + i * 3;
@@ -310,7 +325,7 @@ static void drawHeader(int active) {
   txt(FONT_TINY, WHITE, hx, 8, getHostname());
   char line2[44];
   if ( eth ) snprintf(line2, sizeof(line2), "%s", localIP().toString().c_str());
-  else snprintf(line2, sizeof(line2), "%s  %ddB", localIP().toString().c_str(), (int)WiFi.RSSI());
+  else snprintf(line2, sizeof(line2), "%s  %ddB", localIP().toString().c_str(), stableRSSI());
   txt(FONT_TINY, COL_GRAY, hx, 17, line2);
 
   // Right slot: a pressed button takes over the slot; otherwise the switcher status.
@@ -536,21 +551,49 @@ static void drawPresetSaved() {
   txt(FONT_TINY, C565(90, 66, 0), 20, 150, hint);
 }
 
-// Push the composed frame to the panel only when it actually changed. The canvas
-// is drawn offscreen every tick (cheap); the expensive part is the ~15ms blit, so
-// skip it when this frame is byte-identical to the last (idle console, static
-// setup/connecting screens between their animation steps). Hashing the 76.8KB
-// indexed buffer as 32-bit words is ~0.4ms -- far less than the blit it saves.
+// Push the composed frame to the panel only where it changed. The canvas is drawn
+// offscreen every tick (cheap); the expensive part is the ~20ms full-frame blit,
+// and doing it on every tick is the visible flicker. We hash each row and split the
+// screen into three zones:
+//   - HEADER (rows 0..25):    RSSI/IP + ATEM/ON-AIR pills
+//   - BODY   (rows 26..223):  camera view, radar, zoom, camera strip
+//   - HIST   (rows 224..239): the TX-activity histogram
+// The header and histogram update on their own at idle (RSSI, poll scroll); when
+// only those change we push just that band straight to the panel via the same
+// indexed-bitmap path flush() uses, with a sub-region pointer -- a few-KB write,
+// no full-frame flash. A real BODY change still does a full flush (which also
+// brings the bands current). An unchanged frame touches nothing.
+#define HEADER_BOT 26     // rows 0..25    -- header band
+#define HIST_TOP   224    // rows 224..239 -- histogram band
+
+static void blitBand(int y0, int h) {   // push rows [y0, y0+h) from the canvas to the panel
+  Arduino_Canvas_Indexed* cv = static_cast<Arduino_Canvas_Indexed*>(gfx);
+  g_panel->drawIndexedBitmap((int16_t)0, (int16_t)y0, cv->getFramebuffer() + y0 * 320,
+                             cv->getColorIndex(), (int16_t)320, (int16_t)h, (int16_t)0);
+}
+
 static void flushIfChanged() {
-  uint32_t* fb = reinterpret_cast<uint32_t*>(
-      static_cast<Arduino_Canvas_Indexed*>(gfx)->getFramebuffer());
-  uint32_t h = 2166136261u;                              // FNV-1a over the framebuffer
-  for (int i = 0; i < 320 * 240 / 4; i++) { h ^= fb[i]; h *= 16777619u; }
-  static uint32_t lastHash = 0;
-  static bool haveLast = false;
-  if (haveLast && h == lastHash) return;                 // identical frame -> leave the panel alone
-  lastHash = h; haveLast = true;
-  gfx->flush();
+  uint8_t* fb = static_cast<Arduino_Canvas_Indexed*>(gfx)->getFramebuffer();
+  static uint32_t rowHash[240];        // 960B in BSS -- no heap alloc
+  static bool seeded = false;
+  bool headerCh = false, bodyCh = false, histCh = false;
+  for (int y = 0; y < 240; y++) {
+    const uint8_t* p = fb + y * 320;
+    uint32_t h = 2166136261u;                            // FNV-1a over the row
+    for (int x = 0; x < 320; x++) { h ^= p[x]; h *= 16777619u; }
+    if (h != rowHash[y]) {
+      rowHash[y] = h;
+      if (seeded) {
+        if (y < HEADER_BOT)     headerCh = true;
+        else if (y >= HIST_TOP) histCh   = true;
+        else                    bodyCh   = true;
+      }
+    }
+  }
+  if (!seeded) { seeded = true; gfx->flush(); return; }  // first frame: full paint
+  if (bodyCh) { gfx->flush(); return; }                  // real change -> full frame
+  if (headerCh) blitBand(0, HEADER_BOT);                 // header band only  -> partial blit
+  if (histCh)   blitBand(HIST_TOP, 240 - HIST_TOP);      // histogram band only -> partial blit
 }
 
 void displayLoop(const JoystickState& js) {
