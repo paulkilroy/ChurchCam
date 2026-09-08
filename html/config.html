@@ -27,6 +27,10 @@
       text-align: center;
     }
 
+    /* "Up"/connected status: use the vivid success green (#198754, same as the
+       Scan buttons) instead of Bootstrap's dark alert text/icon green. */
+    .alert-success { color: #198754 !important; }
+
     /* Deadzone box: 20% wide (THRESHOLD .1 either side), centered on the calibrated
        rest position via --center (default 50%), positioned relative to the axis bar. */
     .deadZone {
@@ -271,17 +275,19 @@
     // radio is 2.4 GHz only, so 5 GHz networks simply won't appear -- which is the
     // point: you can't pick one it can't join. Click a row to fill the SSID field.
     async function scanWifi(btn) {
-      const orig = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Scanning...";
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('scanModal'));
       const results = document.getElementById('scanResults');
-      results.innerHTML = "";
+      results.innerHTML = "<div class='text-center text-muted py-3'>"
+        + "<span class='spinner-border spinner-border-sm me-2' role='status' aria-hidden='true'></span>Scanning…</div>";
+      modal.show();
+      if (btn) btn.disabled = true;
       try {
         const r = await fetch('/scanWifi');
         let nets = await r.json();
         nets.sort((a, b) => b.rssi - a.rssi);
         const seen = new Set();                        // one row per SSID (keep strongest)
         nets = nets.filter(n => n.ssid && !seen.has(n.ssid) && seen.add(n.ssid));
+        results.innerHTML = "";
         if (!nets.length) {
           results.innerHTML = "<div class='list-group-item text-muted'>No 2.4 GHz networks found</div>";
         }
@@ -296,7 +302,7 @@
             + `<span class="badge ${q[0]} rounded-pill">${n.rssi} dBm · ${q[1]}</span>`;
           row.onclick = () => {
             document.getElementById('networkName').value = n.ssid;
-            results.innerHTML = "";
+            modal.hide();
             document.getElementById('networkPassword').focus();
           };
           results.appendChild(row);
@@ -304,8 +310,7 @@
       } catch (e) {
         results.innerHTML = "<div class='list-group-item text-danger'>Scan failed — try again.</div>";
       }
-      btn.disabled = false;
-      btn.innerHTML = orig;
+      if (btn) btn.disabled = false;
     }
 
     // Calibrated joystick rest centers (raw ADC, 0-4096). parseInt tolerates the
@@ -694,9 +699,8 @@
                   <label for="networkName">Network Name (SSID)</label>
                 </div>
                 <div class="d-grid my-2">
-                  <button type="button" id="scanBtn" class="btn btn-outline-primary btn-sm" onclick="scanWifi(this)">Scan for networks</button>
+                  <button type="button" id="scanBtn" class="btn btn-success" onclick="scanWifi(this)">Scan Networks</button>
                 </div>
-                <div id="scanResults" class="list-group mb-2"></div>
                 <div class="form-floating">
                   <input name="networkPassword" type="password" class="form-control" id="networkPassword" placeholder="password" value="%PSK%">
                   <label for="networkPassword">Network Password</label>
@@ -750,8 +754,7 @@
 
                 <!-- Button trigger modal -->
                 <button id="discoverCamerasButton" type="button" class="btn btn-success py-2 my-2 col-12"
-                  xdata-bs-toggle="modal" data-bs-target="#discoverModalX" onclick="discoverCameras(this)">Discover
-                  Cameras</button>
+                  onclick="discoverCameras(this)">Scan Cameras</button>
                 <!-- Modal -->
                 <div class="modal fade" id="discoverModal" tabindex="-1">
                   <div class="modal-dialog">
@@ -767,6 +770,25 @@
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                         <button type="button" class="btn btn-primary" data-bs-dismiss="modal"
                           onclick="assignDiscoveredCameras()">Save changes</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Wi-Fi scan results (same modal style as Scan Cameras) -->
+                <div class="modal fade" id="scanModal" tabindex="-1">
+                  <div class="modal-dialog">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <h1 class="modal-title fs-5">Wi-Fi Networks</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                      </div>
+                      <div class="modal-body">
+                        <div id="scanResults" class="list-group"></div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-success" onclick="scanWifi(this)">Rescan</button>
                       </div>
                     </div>
                   </div>
@@ -890,19 +912,19 @@
               </div>
               <!-- Recalibrate center: center the stick, then click -->
               <div class="row">
-                <button type="button" class="btn btn-outline-primary btn-lg btn-block" onclick="recalibrateCenter(this)">
+                <button type="button" class="btn btn-success btn-lg btn-block" onclick="recalibrateCenter(this)">
                   Recalibrate Center</button>
                 <div id="calibResult" class="text-muted small mt-2 text-center"></div>
               </div>
               <!-- Restart Button -->
               <div class="row mt-3">
-                <button type="button" class="btn btn-success btn-lg btn-block"
+                <button type="button" class="btn btn-warning btn-lg btn-block"
                   onclick="location.href='/restart';">Restart Joystick</button>
               </div>
               <hr class="my-4">
               <!-- Upload Button -->
               <div class="row">
-                <button type="button" class="btn btn-warning btn-lg btn-block" onclick="location.href='/erase';">Reset
+                <button type="button" class="btn btn-danger btn-lg btn-block" onclick="location.href='/erase';">Reset
                   All Data</button>
               </div>
               <hr class="my-4">
