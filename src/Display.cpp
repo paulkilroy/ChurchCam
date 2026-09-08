@@ -467,14 +467,15 @@ static void drawConfigScreen() {
   gfx->fillRect(0, 0, 320, 26, COL_AMBER);
   txt(FONT_MD, BLACK, 8, 19, "SETUP MODE");
   gfx->drawXBitmap(292, 4, ap_bits, ap_width, ap_height, BLACK);
-  txt(FONT_SM, COL_GRAY, 12, 52, "No network yet -- connect");
-  txt(FONT_SM, COL_GRAY, 12, 70, "to this device to set it up:");
-  txt(FONT_SM, WHITE, 12, 104, "1. Join Wi-Fi");
-  txt(FONT_MD, COL_AMBER, 120, 108, AP_SSID);
-  txt(FONT_SM, WHITE, 12, 150, "2. Open a browser to");
-  txt(FONT_MD, GREEN, 120, 154, WiFi.softAPIP().toString().c_str());
-  gfx->drawFastHLine(0, 182, 320, COL_RULE);
-  txt(FONT_TINY, COL_GRAY, 12, 200, "Set Wi-Fi, ATEM & cameras there, then it reconnects.");
+  txt(FONT_SM, COL_GRAY, 12, 50, "No network yet -- connect this");
+  txt(FONT_SM, COL_GRAY, 12, 68, "device to set it up:");
+  // Label on its own line; the value sits below it, indented -- keeps the SSID
+  // and IP from colliding with the label text.
+  txt(FONT_SM, WHITE, 12, 100, "1. Join Wi-Fi");
+  txt(FONT_MD, COL_AMBER, 28, 124, AP_SSID);
+  txt(FONT_SM, WHITE, 12, 156, "2. Open a browser to");
+  txt(FONT_MD, GREEN, 28, 180, WiFi.softAPIP().toString().c_str());
+  txt(FONT_TINY, COL_GRAY, 12, 210, "It may open on its own. Set Wi-Fi + cameras there.");
 }
 
 // Booting or link dropped -- keep trying (the firmware never times out to AP once

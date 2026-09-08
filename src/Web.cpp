@@ -313,6 +313,15 @@ static esp_err_t handleCalibrateCenter(PsychicRequest* request, PsychicResponse*
 
 static esp_err_t handleNotFound(PsychicRequest* request, PsychicResponse* response) {
   logi("web request for: %s\n", request->uri().c_str());
+  // Captive portal: while we're only reachable on our own hotspot, bounce every
+  // unknown URL -- including the OS connectivity probes (captive.apple.com,
+  // connectivitycheck.gstatic.com, /generate_204, ...) -- to the config page so a
+  // phone or laptop pops it open automatically on join. Paired with the DNS
+  // responder in Network.cpp that points every hostname at the AP IP.
+  if ( hotspotUp() ) {
+    String loc = "http://" + WiFi.softAPIP().toString() + "/";
+    return response->redirect(loc.c_str());
+  }
   return response->send(404, "text/html", "<!DOCTYPE html><html><head><meta charset=\"ASCII\"><meta name=\"viewport\"content=\"width=device-width, initial-scale=1.0\"><title>PTZ Setup</title></head><body style=\"font-family:Verdana;\"><table bgcolor=\"#777777\"border=\"0\"width=\"100%\"cellpadding=\"1\"style=\"color:#ffffff;font-size:.8em;\"><tr><td><h1>&nbsp PTZ Setup</h1></td></tr></table><br>404 - Page not found</body></html>");
 }
 

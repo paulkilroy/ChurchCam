@@ -2,6 +2,14 @@
 #include <esp_wifi.h>
 #include <WiFi.h>
 #include <ESPmDNS.h>
+#include <DNSServer.h>   // captive-portal DNS: answers every hostname with the AP IP
+
+// Captive-portal DNS. Runs only while the config hotspot is up (AP mode); it
+// resolves every lookup to the AP IP so the phone/laptop's connectivity probe
+// lands on our web server, which redirects it to the config page. DNSServer is
+// UDP-only, so it links fine alongside PsychicHttp (unlike WebServer).
+static DNSServer dnsServer;
+static bool dnsRunning = false;
 
 bool WiFiWorked = false;
 
@@ -137,12 +145,23 @@ void networkSetup(const char info[]) {
 // context, after the event callback has signalled connectivity — keeping the
 // non-thread-safe begin()/connect()/mDNS work off the WiFi/Ethernet event task.
 void networkServicesLoop() {
+  // Pump the captive-portal DNS while the hotspot is up (must be called often).
+  if (dnsRunning) dnsServer.processNextRequest();
+
   // Start the config AP here (loop context) when the WiFi event task asked for it.
   if (startApRequested) {
     startApRequested = false;
     logi("Starting config AP: %s", AP_SSID);
     WiFi.mode(WIFI_AP);
     WiFi.softAP(AP_SSID);
+    // Point every DNS lookup at us so the OS captive-portal check pops the page.
+    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+    if (dnsServer.start(53, "*", WiFi.softAPIP())) {
+      dnsRunning = true;
+      logi("Captive DNS started -> %s", WiFi.softAPIP().toString().c_str());
+    } else {
+      logw("Captive DNS failed to start");
+    }
   }
 
   if (!servicesRequested || servicesStarted) return;
