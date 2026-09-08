@@ -216,6 +216,35 @@ void onvif_setup() {
     // set presets 1 and 2
 }
 
+// Surface ONVIF command failures instead of silently discarding the reply. A
+// camera (and the sim) answers a bad/unauthorized request with HTTP 4xx/5xx and
+// a SOAP <Fault> carrying a ter:* Subcode + a human <Reason><Text>. Without this,
+// a wrong/blank password just made the camera sit still with no clue why.
+// Throttled to one line per camera per 2s so driving a mis-configured camera
+// doesn't re-flood the log.
+static void onvifCheckResponse( int cam, const char* buf ) {
+    int http = 0;                                  // "HTTP/1.1 400 ..." -> 400
+    const char* sp = strchr( buf, ' ' );
+    if ( sp ) http = atoi( sp + 1 );
+    bool fault = strstr( buf, "Fault" ) != nullptr;
+    if ( !fault && ( http == 0 || ( http >= 200 && http < 300 ) ) ) return;   // success
+
+    char reason[80] = "";
+    const char* t = strstr( buf, ":Text" );        // <s:Text xml:lang="en">reason</s:Text>
+    const char* gt = t ? strchr( t, '>' ) : nullptr;
+    if ( gt ) { gt++; size_t i = 0; while ( gt[i] && gt[i] != '<' && i < sizeof(reason)-1 ) { reason[i] = gt[i]; i++; } reason[i] = 0; }
+    if ( !reason[0] ) {                            // fall back to the ter:* subcode
+        const char* c = strstr( buf, "ter:" );
+        if ( c ) { size_t i = 0; while ( c[i] && c[i] != '<' && c[i] != ' ' && i < sizeof(reason)-1 ) { reason[i] = c[i]; i++; } reason[i] = 0; }
+    }
+
+    static uint32_t lastLogAt[NUM_CAMERAS + 1] = { 0 };
+    if ( cam >= 0 && cam <= NUM_CAMERAS && millis() - lastLogAt[cam] < 2000 ) return;
+    if ( cam >= 0 && cam <= NUM_CAMERAS ) lastLogAt[cam] = millis();
+    logw( "ONVIF cam %d rejected the command: HTTP %d%s%s (check ONVIF user/password)",
+          cam + 1, http, reason[0] ? " -- " : "", reason[0] ? reason : "" );
+}
+
 void onvif_send( int cameraNumber ) {
     //byte messageBuf[2048];
     if (NETWORK_SUCCESS != camConnect(cameraNumber)) {
@@ -231,10 +260,12 @@ void onvif_send( int cameraNumber ) {
 
     // camRecv() returns the byte count on success (>0), so treat any non-positive
     // result as a failure rather than comparing against NETWORK_SUCCESS.
-    if (camRecv(cameraNumber, (byte*)messageBuf, sizeof(messageBuf)) <= 0) {
-        logi("Unable to get response");
+    int rlen = camRecv(cameraNumber, (byte*)messageBuf, sizeof(messageBuf));
+    if (rlen <= 0) {
+        logw("ONVIF cam %d: no response", cameraNumber + 1);
     } else {
-        //logi("Message Recieved: %s", messageBuf);
+        messageBuf[rlen < (int)sizeof(messageBuf) ? rlen : (int)sizeof(messageBuf) - 1] = '\0';
+        onvifCheckResponse(cameraNumber, messageBuf);
     }
 
     camClose(cameraNumber);
