@@ -186,8 +186,11 @@ void displaySetup() {
   Arduino_GFX *gfx_chip = new Arduino_ILI9341(bus, TFT_RST /* RST */, 3 /* rotation */, false /* IPS */);
   gfx = new Arduino_Canvas_Indexed(320 /* width */, 240 /* height */, gfx_chip, 0, 0, 0);
 
-  // Init Display
-  if (!gfx->begin()) {
+  // Init Display. 80MHz SPI: the full-frame blit is ~15ms vs ~31ms at the 40MHz
+  // default, which halves the tearing window (the panel has no TE pin to sync to
+  // -- see below). If the ribbon can't hold 80MHz (visible corruption/snow), drop
+  // this to 60000000.
+  if (!gfx->begin(80000000)) {
     Serial.println("gfx->begin() failed!");
   }
   gfx->setTextWrap(false);
@@ -532,6 +535,23 @@ static void drawPresetSaved() {
   txt(FONT_TINY, C565(90, 66, 0), 20, 150, hint);
 }
 
+// Push the composed frame to the panel only when it actually changed. The canvas
+// is drawn offscreen every tick (cheap); the expensive part is the ~15ms blit, so
+// skip it when this frame is byte-identical to the last (idle console, static
+// setup/connecting screens between their animation steps). Hashing the 76.8KB
+// indexed buffer as 32-bit words is ~0.4ms -- far less than the blit it saves.
+static void flushIfChanged() {
+  uint32_t* fb = reinterpret_cast<uint32_t*>(
+      static_cast<Arduino_Canvas_Indexed*>(gfx)->getFramebuffer());
+  uint32_t h = 2166136261u;                              // FNV-1a over the framebuffer
+  for (int i = 0; i < 320 * 240 / 4; i++) { h ^= fb[i]; h *= 16777619u; }
+  static uint32_t lastHash = 0;
+  static bool haveLast = false;
+  if (haveLast && h == lastHash) return;                 // identical frame -> leave the panel alone
+  lastHash = h; haveLast = true;
+  gfx->flush();
+}
+
 void displayLoop(const JoystickState& js) {
   sampleTx();   // internally throttled to 1Hz; keep it at full loop rate
 
@@ -546,10 +566,10 @@ void displayLoop(const JoystickState& js) {
   gfx->fillScreen(BLACK);
 
   // Screen state machine: OTA / config (AP-only) / connecting / console.
-  if ( g_otaActive )                          { drawUpdatingScreen();   gfx->flush(); return; }
-  if ( hotspotUp() && !wifiUp() && !ethUp() ) { drawConfigScreen();     gfx->flush(); return; }
-  if ( !networkUp() )                         { drawConnectingScreen(); gfx->flush(); return; }
-  if ( presetSaveAt != 0 && millis() - presetSaveAt < 2500 ) { drawPresetSaved(); gfx->flush(); return; }
+  if ( g_otaActive )                          { drawUpdatingScreen();   flushIfChanged(); return; }
+  if ( hotspotUp() && !wifiUp() && !ethUp() ) { drawConfigScreen();     flushIfChanged(); return; }
+  if ( !networkUp() )                         { drawConnectingScreen(); flushIfChanged(); return; }
+  if ( presetSaveAt != 0 && millis() - presetSaveAt < 2500 ) { drawPresetSaved(); flushIfChanged(); return; }
 
   int active = getActiveCamera();
   int input  = active + 1;
@@ -563,7 +583,7 @@ void displayLoop(const JoystickState& js) {
   drawCameraStrip(active);
   drawHistogram();
 
-  gfx->flush();
+  flushIfChanged();
 }
 
 /*
