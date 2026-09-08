@@ -223,6 +223,7 @@ void displaySetup() {
 #define COL_GRAY   C565(96,104,120)
 #define COL_DIM    C565(52,60,74)
 #define COL_TRACK  C565(26,30,40)
+#define COL_FAINT  C565(28,32,40)   // absent-camera tiles: barely above the black bg
 #define COL_GREEN2 C565(22,120,54)
 #define COL_RULE   C565(110,120,134)
 
@@ -391,7 +392,9 @@ static void drawRadar(int pan, int tilt, int zoom, int tally) {
   gfx->drawFastVLine(cx, cy - r, 2 * r, COL_TRACK);
   float pn = (pan  / (float)AnalogMax) * 2.0f - 1.0f;
   float tn = (tilt / (float)AnalogMax) * 2.0f - 1.0f;
-  int dx = cx + (int)(pn * (r - 6)), dy = cy - (int)(tn * (r - 6));
+  // dy: + tn so pushing the stick up (which reads low on the tilt ADC, same
+  // convention the control loop inverts for tiltSpeed) moves the dot UP.
+  int dx = cx + (int)(pn * (r - 6)), dy = cy + (int)(tn * (r - 6));
 
   // Light trail: a short fading tail of the last few dot positions. This traces
   // joystick deflection, not camera aim (same caveat as the dot itself). We
@@ -431,11 +434,11 @@ static void drawCameraStrip(int active) {
     int st;
     if ( input == pgm ) st = 4; else if ( input == pvw ) st = 3;
     else { int s = cachedCameraStatus(i); st = s == CAMERA_UP ? 1 : s == CAMERA_DOWN ? 2 : 0; }
-    uint16_t col = st == 4 ? RED : st == 3 ? GREEN : st == 2 ? COL_AMBER : st == 1 ? COL_GRAY : COL_DIM;
+    uint16_t col = st == 4 ? RED : st == 3 ? GREEN : st == 2 ? COL_AMBER : st == 1 ? COL_GRAY : COL_FAINT;
     frameRR(tx, y, tw, h, 3, col, st >= 3 ? 2 : 1);
     if ( st >= 3 ) gfx->fillRect(tx + 1, y + 1, tw - 2, 4, col);
     char num[4]; snprintf(num, sizeof(num), "%d", input);
-    uint16_t nc = st == 0 ? COL_DIM : st == 2 ? COL_AMBER : WHITE;
+    uint16_t nc = st == 0 ? COL_FAINT : st == 2 ? COL_AMBER : WHITE;
     txtC(FONT_MD, nc, tx + tw / 2, y + 26, num);
     if ( st == 4 ) txt(FONT_TINY, RED, tx + 3, y + h - 3, "PRG");
     else if ( st == 3 ) txt(FONT_TINY, GREEN, tx + 3, y + h - 3, "PVW");
