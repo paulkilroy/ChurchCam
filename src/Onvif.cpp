@@ -399,7 +399,12 @@ static const char wsDiscoveryProbe[] =
 // always comes from the URL; IP comes from the URL when it is a literal,
 // otherwise the caller's source IP is kept.
 static void parseXAddr(const char *body, IPAddress &ip, uint16_t &port) {
-  const char *h = strstr(body, "http://");
+  // Search only from the <XAddrs> element onward. The SOAP envelope is full of
+  // earlier http:// URLs (WS-Addressing Action, xmlns namespaces); grabbing the
+  // first one in the whole body parsed a schema host with no port -> every
+  // camera defaulted to :80 and collapsed to one entry under the ip+port dedup.
+  const char *x = strstr(body, "XAddrs");
+  const char *h = strstr(x ? x : body, "http://");
   if (!h) return;
   h += 7;
   char host[64];
