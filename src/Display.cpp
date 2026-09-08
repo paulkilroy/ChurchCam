@@ -578,9 +578,18 @@ void displayLoop(const JoystickState& js) {
   int pvw = atemSwitcher.isConnected() ? atemSwitcher.getPreviewInputVideoSource(0) : -1;
   int tally = ( input == pgm ) ? 2 : ( input == pvw ) ? 1 : 0;
 
+  // Repaint dead zone: cheap pots wander a few ADC counts at rest, which would
+  // jiggle the radar dot / zoom bar every frame and defeat flushIfChanged(). Only
+  // move a gauge's shown value once the input drifts past ~48 counts (~1px on
+  // these gauges), so a still stick yields a byte-identical frame -> no reflush.
+  static int hPan = -1, hTilt = -1, hZoom = -1;
+  if ( hPan  < 0 || abs(js.pan  - hPan ) > 48 ) hPan  = js.pan;
+  if ( hTilt < 0 || abs(js.tilt - hTilt) > 48 ) hTilt = js.tilt;
+  if ( hZoom < 0 || abs(js.zoom - hZoom) > 48 ) hZoom = js.zoom;
+
   drawHeader(active);
   drawTallyBox(active, tally);
-  drawRadar(js.pan, js.tilt, js.zoom, tally);
+  drawRadar(hPan, hTilt, hZoom, tally);
   drawCameraStrip(active);
   drawHistogram();
 
