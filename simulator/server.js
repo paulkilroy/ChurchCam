@@ -89,7 +89,7 @@ const web = http.createServer((req, res) => {
     sseClients.add(res);
     // Boot id first (page reloads if it changed), then current ATEM state.
     res.write(`data: ${JSON.stringify({ kind: 'hello', boot: BOOT_ID })}\n\n`);
-    res.write(`data: ${JSON.stringify({ kind: 'atem', program: atem.program, preview: atem.preview })}\n\n`);
+    res.write(`data: ${JSON.stringify(atem.atemState())}\n\n`);
     req.on('close', () => sseClients.delete(res));
     return;
   }
@@ -104,7 +104,22 @@ const web = http.createServer((req, res) => {
       if (url.pathname === '/atem/program') atem.setProgram(input);
       else atem.setPreview(input);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ program: atem.program, preview: atem.preview }));
+      res.end(JSON.stringify({ program: atem.program, preview: atem.preview, streaming: atem.streaming }));
+    });
+    return;
+  }
+
+  // Toggle the live stream (drives ON AIR / OFF AIR on the controller). Body
+  // {on:true|false}; omit `on` to flip the current state.
+  if (req.method === 'POST' && url.pathname === '/atem/streaming') {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      let on = !atem.streaming;
+      try { const j = JSON.parse(body || '{}'); if ('on' in j) on = !!j.on; } catch (_) {}
+      atem.setStreaming(on);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ streaming: atem.streaming }));
     });
     return;
   }
@@ -354,6 +369,7 @@ const atem = {
   localId: 0,
   program: 1,          // ATEM input source currently on Program
   preview: 2,          // ...and Preview
+  streaming: false,    // live-stream on air? (drives the controller's ON AIR / OFF AIR)
   pingTimer: null,
   unacked: new Map(),  // reliable packets awaiting ACK (id -> {body, tries})
 
@@ -400,6 +416,15 @@ const atem = {
     return this.cmd(name, d);
   },
 
+  // Streaming status ('StRS'). ATEMmin reads a 16-bit flags word from the first
+  // two payload bytes and reports getStreamStreaming() = flags & (1<<2). So bit 2
+  // set => on air. (Other bits: 0 idle, 1 connecting, 3 stopping, 4 invalid.)
+  strS() {
+    const d = Buffer.alloc(4);
+    d.writeUInt16BE(this.streaming ? 0x0004 : 0x0000, 0);
+    return this.cmd('StRS', d);
+  },
+
   // Send a reliable (AckRequest) packet carrying command segments.
   // Send a reliable command packet and remember it until the client ACKs, so a
   // lost live update (e.g. a PGM/PVW change) gets retransmitted -- like a real
@@ -438,6 +463,7 @@ const atem = {
       this.inPr(4, 'Camera 4', 'CAM4'),
       this.prgPrv('PrgI', this.program),
       this.prgPrv('PrvI', this.preview),
+      this.strS(),
     ]);
     this.sendInitState();
     this.localId = 2;
@@ -452,17 +478,26 @@ const atem = {
     this.send(Buffer.concat([this.header(F_ACKREQ, 12 + b.length, 0, 1), b]));
   },
 
+  atemState() {
+    return { kind: 'atem', program: this.program, preview: this.preview, streaming: this.streaming };
+  },
   setProgram(input) {
     this.program = input;
     const id = this.sendCommands([this.prgPrv('PrgI', input)]);
     logCmd(null, `PROGRAM -> input ${input} (atem pkt id ${id})`);
-    broadcast({ kind: 'atem', program: this.program, preview: this.preview });
+    broadcast(this.atemState());
   },
   setPreview(input) {
     this.preview = input;
     const id = this.sendCommands([this.prgPrv('PrvI', input)]);
     logCmd(null, `PREVIEW -> input ${input} (atem pkt id ${id})`);
-    broadcast({ kind: 'atem', program: this.program, preview: this.preview });
+    broadcast(this.atemState());
+  },
+  setStreaming(on) {
+    this.streaming = !!on;
+    const id = this.sendCommands([this.strS()]);
+    logCmd(null, `STREAMING -> ${this.streaming ? 'ON AIR' : 'OFF AIR'} (atem pkt id ${id})`);
+    broadcast(this.atemState());
   },
 
   start() {

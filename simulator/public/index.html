@@ -43,6 +43,19 @@
   .busrow.pgm button.on { background: var(--pgm); border-color: var(--pgm); color: #fff; box-shadow: 0 0 14px rgba(229,72,77,.5); }
   .busrow.pvw button.on { background: var(--pvw); border-color: var(--pvw); color: #fff; box-shadow: 0 0 14px rgba(48,163,108,.45); }
   .hint { color: var(--muted); font-size: .74rem; margin-top: .7rem; }
+  .busrow.air .cap { color: var(--muted); }
+  .live-btn {
+    font-family: var(--mono); font-weight: 800; font-size: .9rem; letter-spacing: .1em; color: var(--muted);
+    background: #1e262b; border: 1px solid var(--line); border-radius: 7px; padding: .6rem 0;
+    cursor: pointer; transition: background .12s, box-shadow .15s, color .12s;
+  }
+  .live-btn:hover { background: #232d33; }
+  .live-btn:active { transform: translateY(1px); }
+  .live-btn.on {
+    background: var(--pgm); border-color: var(--pgm); color: #fff;
+    box-shadow: 0 0 16px rgba(229,72,77,.55); animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 10px rgba(229,72,77,.4);} 50% { box-shadow: 0 0 20px rgba(229,72,77,.7);} }
 
   /* Camera grid */
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -83,7 +96,8 @@
     <div class="label">ATEM Mini</div>
     <div class="busrow pgm"><span class="cap">PGM</span><div class="btns" id="pgm"></div></div>
     <div class="busrow pvw"><span class="cap">PVW</span><div class="btns" id="pvw"></div></div>
-    <div class="hint">PTZ follows the <b>Preview</b> camera (or <b>Program</b> when the override button is held on the controller). Pick a Preview camera, then move the joystick.</div>
+    <div class="busrow air"><span class="cap">AIR</span><button id="liveBtn" class="live-btn">OFF AIR</button></div>
+    <div class="hint">PTZ follows the <b>Preview</b> camera (or <b>Program</b> when the override button is held on the controller). <b>AIR</b> toggles the live stream — the controller shows <b>ON AIR</b> / <b>OFF AIR</b> to match.</div>
   </div>
   <div class="grid" id="grid"></div>
 </main>
@@ -146,7 +160,11 @@ function sizeCanvases() {
 window.addEventListener('resize', sizeCanvases);
 
 // ---- ATEM buttons ----
-let atemState = { program: 1, preview: 2 };
+let atemState = { program: 1, preview: 2, streaming: false };
+document.getElementById('liveBtn').onclick = () => fetch('/atem/streaming', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ on: !atemState.streaming }),
+});
 function buildBus(id, bus) {
   const host = document.getElementById(id);
   for (let i = 1; i <= 4; i++) {
@@ -164,6 +182,9 @@ buildBus('pvw', 'preview');
 function renderAtem() {
   document.querySelectorAll('#pgm button').forEach((b, i) => b.classList.toggle('on', i + 1 === atemState.program));
   document.querySelectorAll('#pvw button').forEach((b, i) => b.classList.toggle('on', i + 1 === atemState.preview));
+  const lb = document.getElementById('liveBtn');
+  lb.textContent = atemState.streaming ? 'ON AIR' : 'OFF AIR';
+  lb.classList.toggle('on', atemState.streaming);
   cams.forEach((c) => {
     const t = c.tallyEl;
     t.className = 'tally';
@@ -182,7 +203,7 @@ function connect() {
   es.onmessage = (e) => {
     let m; try { m = JSON.parse(e.data); } catch (_) { return; }
     if (m.kind === 'hello') { if (window._boot && window._boot !== m.boot) location.reload(); else window._boot = m.boot; return; }
-    if (m.kind === 'atem') { atemState = { program: m.program, preview: m.preview }; renderAtem(); return; }
+    if (m.kind === 'atem') { atemState = { program: m.program, preview: m.preview, streaming: !!m.streaming }; renderAtem(); return; }
     const c = cams[m.cam]; if (!c) return;
     c.lastActivity = performance.now();
     if (m.kind === 'pt') { c.vpan = m.pan; c.vtilt = m.tilt; c.tween = null; }
