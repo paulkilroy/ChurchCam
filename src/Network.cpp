@@ -264,9 +264,27 @@ void networkSetup() {
 
   if( !InSimulator ) {
     logi("Starting ETH");
-    // Arduino core 3.x needs the full PHY description. Olimex ESP32-PoE:
-    // LAN8720, PHY addr 0, MDC=23, MDIO=18, power=GPIO12, clock=GPIO17 output.
-    ETH.begin(ETH_PHY_LAN8720, 0, 23, 18, ETH_PHY_POWER, ETH_CLK_MODE);
+    // Olimex ESP32-PoE: LAN8720, PHY addr 0, MDC=23, MDIO=18, clock=GPIO17 output.
+    //
+    // GPIO12 does NOT reset the PHY on this board -- it gates the PHY's 3.3V rail
+    // through a transistor + FET feeding ~44uF of bulk (Rev.E schematic). If the
+    // core treats GPIO12 as reset_gpio_num it pulses it, which here briefly *cuts
+    // PHY power*; the immediately-following esp_eth_phy_802_3_pwrctl() then talks
+    // to a dead PHY over MDIO and fails with "power up timeout" -> driver install
+    // -1. And a failed install leaks the EMAC interrupt, so a naive retry then
+    // hits "No free interrupt inputs" -- retrying cannot work.
+    //
+    // Fix: hold the PHY rail ON ourselves and start ETH with power = -1, so the
+    // core never touches GPIO12 and never cuts power. The PHY comes out of reset
+    // via its own on-board RC (NRST). One clean attempt only.
+    pinMode(ETH_PHY_POWER, OUTPUT);
+    digitalWrite(ETH_PHY_POWER, HIGH);   // enable + hold the PHY 3.3V rail
+    delay(300);                          // let the rail + RC reset (NRST) settle
+    if (ETH.begin(ETH_PHY_LAN8720, 0, 23, 18, -1 /*power held high above*/, ETH_CLK_MODE)) {
+      logi("ETH.begin OK");
+    } else {
+      loge("ETH.begin failed -- continuing on Wi-Fi");
+    }
     ETH.setHostname(AP_SSID);
     delay(100);
 
