@@ -551,49 +551,45 @@ static void drawPresetSaved() {
   txt(FONT_TINY, C565(90, 66, 0), 20, 150, hint);
 }
 
-// Push the composed frame to the panel only where it changed. The canvas is drawn
-// offscreen every tick (cheap); the expensive part is the ~20ms full-frame blit,
-// and doing it on every tick is the visible flicker. We hash each row and split the
-// screen into three zones:
-//   - HEADER (rows 0..25):    RSSI/IP + ATEM/ON-AIR pills
-//   - BODY   (rows 26..223):  camera view, radar, zoom, camera strip
-//   - HIST   (rows 224..239): the TX-activity histogram
-// The header and histogram update on their own at idle (RSSI, poll scroll); when
-// only those change we push just that band straight to the panel via the same
-// indexed-bitmap path flush() uses, with a sub-region pointer -- a few-KB write,
-// no full-frame flash. A real BODY change still does a full flush (which also
-// brings the bands current). An unchanged frame touches nothing.
-#define HEADER_BOT 26     // rows 0..25    -- header band
-#define HIST_TOP   224    // rows 224..239 -- histogram band
-
-static void blitBand(int y0, int h) {   // push rows [y0, y0+h) from the canvas to the panel
-  Arduino_Canvas_Indexed* cv = static_cast<Arduino_Canvas_Indexed*>(gfx);
-  g_panel->drawIndexedBitmap((int16_t)0, (int16_t)y0, cv->getFramebuffer() + y0 * 320,
-                             cv->getColorIndex(), (int16_t)320, (int16_t)h, (int16_t)0);
-}
+// Dirty-tile blitting: the canvas is composed offscreen every tick (cheap); the
+// expensive part is pushing it to the panel, and doing the whole 320x240 frame
+// every tick is the flicker. Instead we split the screen into a grid of tiles,
+// hash each one, and push only the tiles that changed -- so a joystick move
+// repaints just the radar/zoom tiles, the histogram scroll just its tile, and an
+// unchanged frame nothing. Each dirty tile is a sub-region write via the raw
+// panel's drawIndexedBitmap (the same path flush() uses, with an x_skip stride).
+// 40x40 tiles -> an 8x6 grid; hashing all of them costs the same as one whole-
+// frame hash (~0.5ms), far less than the blit it avoids.
+#define TILE_W  40
+#define TILE_H  40
+#define TILES_X (320 / TILE_W)   // 8
+#define TILES_Y (240 / TILE_H)   // 6
 
 static void flushIfChanged() {
-  uint8_t* fb = static_cast<Arduino_Canvas_Indexed*>(gfx)->getFramebuffer();
-  static uint32_t rowHash[240];        // 960B in BSS -- no heap alloc
+  Arduino_Canvas_Indexed* cv = static_cast<Arduino_Canvas_Indexed*>(gfx);
+  uint8_t* fb = cv->getFramebuffer();
+  uint16_t* pal = cv->getColorIndex();
+  static uint32_t tileHash[TILES_X * TILES_Y];
   static bool seeded = false;
-  bool headerCh = false, bodyCh = false, histCh = false;
-  for (int y = 0; y < 240; y++) {
-    const uint8_t* p = fb + y * 320;
-    uint32_t h = 2166136261u;                            // FNV-1a over the row
-    for (int x = 0; x < 320; x++) { h ^= p[x]; h *= 16777619u; }
-    if (h != rowHash[y]) {
-      rowHash[y] = h;
-      if (seeded) {
-        if (y < HEADER_BOT)     headerCh = true;
-        else if (y >= HIST_TOP) histCh   = true;
-        else                    bodyCh   = true;
+  for (int ty = 0; ty < TILES_Y; ty++) {
+    for (int tx = 0; tx < TILES_X; tx++) {
+      uint8_t* base = fb + (ty * TILE_H) * 320 + tx * TILE_W;
+      uint32_t hsh = 2166136261u;                        // FNV-1a over the tile
+      for (int row = 0; row < TILE_H; row++) {
+        const uint8_t* p = base + row * 320;
+        for (int col = 0; col < TILE_W; col++) { hsh ^= p[col]; hsh *= 16777619u; }
+      }
+      int idx = ty * TILES_X + tx;
+      if (hsh != tileHash[idx]) {
+        tileHash[idx] = hsh;
+        if (seeded) {                                    // push just this tile to the panel
+          g_panel->drawIndexedBitmap((int16_t)(tx * TILE_W), (int16_t)(ty * TILE_H), base, pal,
+                                     (int16_t)TILE_W, (int16_t)TILE_H, (int16_t)(320 - TILE_W));
+        }
       }
     }
   }
-  if (!seeded) { seeded = true; gfx->flush(); return; }  // first frame: full paint
-  if (bodyCh) { gfx->flush(); return; }                  // real change -> full frame
-  if (headerCh) blitBand(0, HEADER_BOT);                 // header band only  -> partial blit
-  if (histCh)   blitBand(HIST_TOP, 240 - HIST_TOP);      // histogram band only -> partial blit
+  if (!seeded) { seeded = true; gfx->flush(); }           // first frame: one full paint
 }
 
 void displayLoop(const JoystickState& js) {
