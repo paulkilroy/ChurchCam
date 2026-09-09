@@ -1,5 +1,6 @@
 #include "globals.h"
 #include <esp_wifi.h>
+#include <Preferences.h>   // persist the working ETH clock pin (WROOM=GPIO17 / WROVER=GPIO0)
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <DNSServer.h>   // captive-portal DNS: answers every hostname with the AP IP
@@ -26,6 +27,10 @@ static const char* servicesReason = "startup";
 // actually started in loop context (networkServicesLoop) -- calling WiFi.softAP()
 // from inside the event callback logs "Starting AP" but doesn't reliably broadcast.
 static volatile bool startApRequested = false;
+// An ETH<->WiFi handoff changes which interface carries traffic, but existing
+// camera sockets stay bound to the old one. Set from the ETH event task and acted
+// on in loop context: close every camera link so it rebuilds on the new interface.
+static volatile bool resetCamLinksRequested = false;
 // The ESP32 often needs a few tries to associate (a transient NO_AP_FOUND /
 // AUTH_EXPIRE on the first attempt is common even with the right password). The
 // radio's own auto-reconnect (setAutoReconnect(true)) does the retrying; we just
@@ -148,19 +153,32 @@ void networkServicesLoop() {
   // Pump the captive-portal DNS while the hotspot is up (must be called often).
   if (dnsRunning) dnsServer.processNextRequest();
 
+  // An interface came or went -- rebuild the camera sockets on the current one.
+  if (resetCamLinksRequested) {
+    resetCamLinksRequested = false;
+    logi("Interface changed -> resetting camera links");
+    camResetAllLinks();
+  }
+
   // Start the config AP here (loop context) when the WiFi event task asked for it.
   if (startApRequested) {
     startApRequested = false;
-    logi("Starting config AP: %s", AP_SSID);
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(AP_SSID);
-    // Point every DNS lookup at us so the OS captive-portal check pops the page.
-    dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
-    if (dnsServer.start(53, "*", WiFi.softAPIP())) {
-      dnsRunning = true;
-      logi("Captive DNS started -> %s", WiFi.softAPIP().toString().c_str());
+    // Race guard: WiFi can exhaust its retries before ETH finishes coming up (~6s
+    // on WROVER). If Ethernet is up by now we have connectivity -- skip the AP.
+    if (ethUp()) {
+      logi("Config AP requested, but ETH is up now -- skipping AP");
     } else {
-      logw("Captive DNS failed to start");
+      logi("Starting config AP: %s", AP_SSID);
+      WiFi.mode(WIFI_AP);
+      WiFi.softAP(AP_SSID);
+      // Point every DNS lookup at us so the OS captive-portal check pops the page.
+      dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+      if (dnsServer.start(53, "*", WiFi.softAPIP())) {
+        dnsRunning = true;
+        logi("Captive DNS started -> %s", WiFi.softAPIP().toString().c_str());
+      } else {
+        logw("Captive DNS failed to start");
+      }
     }
   }
 
@@ -185,24 +203,19 @@ void wifiEventCallback(WiFiEvent_t event) {
       break;
     case ARDUINO_EVENT_ETH_CONNECTED:
       logi("%d ETH_CONNECTED", WiFi.getStatusBits());
-      
-      // Grasping.. THIS WORKED -- Stopped ETH competing with Wifi.. 
-      // see if it still works after I uncomment the rest of this file
-      WiFi.setAutoReconnect(false);
-      WiFi.mode(WIFI_OFF);
+      // Do NOT toggle the WiFi radio here (that crashed an in-flight camera recv
+      // and flapped the link). Both interfaces stay up; ETH's higher route priority
+      // (set once after ETH.begin) makes the stack prefer it automatically.
       break;
     case ARDUINO_EVENT_ETH_GOT_IP:
       logi("%d ETH_GOT_IP", WiFi.getStatusBits());
       logi("ETH_GOT_IP Hostname: %s IP: %s", ETH.getHostname(), ETH.localIP().toString().c_str());
-      WiFi.setAutoReconnect(false);
-      WiFi.mode(WIFI_OFF);
       requestNetworkServices("ETH_GOT_IP");
+      resetCamLinksRequested = true;   // traffic now prefers ETH -> rebuild cam sockets on it
       break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
-      logi("%d ETH_DISCONNECTED", WiFi.getStatusBits());
-      WiFi.mode(WIFI_STA);
-      WiFi.setAutoReconnect(true);
-      WiFi.begin();
+      logi("%d ETH_DISCONNECTED (WiFi stays up as the fallback route)", WiFi.getStatusBits());
+      resetCamLinksRequested = true;   // ETH gone -> drop cam sockets so they reopen on WiFi
       break;
     case ARDUINO_EVENT_ETH_STOP:
       logi("%d ETH_STOP", WiFi.getStatusBits());
@@ -274,6 +287,16 @@ void wifiEventCallback(WiFiEvent_t event) {
   }
 }
 
+// Bring up the Ethernet PHY with a specific RMII clock-out pin. Holds the PHY
+// power pin (GPIO12) LOW first so the clock is up before the PHY is powered (see
+// the sequencing note in networkSetup). Returns true if the driver installed.
+static bool ethBeginWithClock(eth_clock_mode_t clkMode) {
+  pinMode(ETH_PHY_POWER, OUTPUT);
+  digitalWrite(ETH_PHY_POWER, LOW);
+  delay(200);
+  return ETH.begin(ETH_PHY_LAN8720, 0, 23, 18, ETH_PHY_POWER, clkMode);
+}
+
 /**
  * Setup event callback, ethernet and wifi and static IPs
 */
@@ -283,27 +306,56 @@ void networkSetup() {
 
   if( !InSimulator ) {
     logi("Starting ETH");
-    // Olimex ESP32-PoE: LAN8720, PHY addr 0, MDC=23, MDIO=18, clock=GPIO17 output.
+    // Olimex ESP32-PoE / PoE-ISO Ethernet: LAN8720, PHY addr 0, MDC=23, MDIO=18,
+    // GPIO12 the PHY power-enable pin. The ESP32 generates the 50MHz RMII clock,
+    // but WHICH pin it comes out on depends on the module:
+    //   - WROOM  (no PSRAM):  GPIO16/17 are free -> clock on GPIO17.
+    //   - WROVER (has PSRAM):  PSRAM owns GPIO16/17 -> clock on GPIO0.
+    // We deliberately do NOT enable PSRAM in the build (enabling it reserves
+    // GPIO16/17 and then even the WROOM's GPIO17 clock is rejected by the EMAC), so
+    // psramFound() can't tell the modules apart. Instead we try one clock and fall
+    // back to the other. Trying the wrong one first costs an extra failed begin +
+    // ETH.end() + delays (~seconds), so we PERSIST the clock that worked (NVS) and
+    // try it first next boot -- a given board never changes module. Default when
+    // nothing is saved is GPIO0, since the shipping board is the WROVER (Board A).
     //
-    // GPIO12 does NOT reset the PHY on this board -- it gates the PHY's 3.3V rail
-    // through a transistor + FET feeding ~44uF of bulk (Rev.E schematic). If the
-    // core treats GPIO12 as reset_gpio_num it pulses it, which here briefly *cuts
-    // PHY power*; the immediately-following esp_eth_phy_802_3_pwrctl() then talks
-    // to a dead PHY over MDIO and fails with "power up timeout" -> driver install
-    // -1. And a failed install leaks the EMAC interrupt, so a naive retry then
-    // hits "No free interrupt inputs" -- retrying cannot work.
-    //
-    // Fix: hold the PHY rail ON ourselves and start ETH with power = -1, so the
-    // core never touches GPIO12 and never cuts power. The PHY comes out of reset
-    // via its own on-board RC (NRST). One clean attempt only.
-    pinMode(ETH_PHY_POWER, OUTPUT);
-    digitalWrite(ETH_PHY_POWER, HIGH);   // enable + hold the PHY 3.3V rail
-    delay(300);                          // let the rail + RC reset (NRST) settle
-    if (ETH.begin(ETH_PHY_LAN8720, 0, 23, 18, -1 /*power held high above*/, ETH_CLK_MODE)) {
-      logi("ETH.begin OK");
-    } else {
-      loge("ETH.begin failed -- continuing on Wi-Fi");
+    // Power SEQUENCING (from Olimex's ESP32-POE-ISO-eth-wifi-nat.ino): GPIO12 is
+    // also the MTDI strapping pin and can glitch high at boot, briefly powering
+    // the PHY before its clock exists and latching it dead. So each attempt drives
+    // GPIO12 LOW (PHY off) and holds before ETH.begin() brings the clock up.
+    Preferences ethPrefs;
+    ethPrefs.begin("eth", false);
+    uint8_t savedClk = ethPrefs.getUChar("clk", 0xFF);      // 0xFF = nothing saved yet
+    eth_clock_mode_t first  = (savedClk != 0xFF) ? (eth_clock_mode_t)savedClk
+                                                 : ETH_CLOCK_GPIO0_OUT;   // WROVER default
+    eth_clock_mode_t second = (first == ETH_CLOCK_GPIO0_OUT) ? ETH_CLOCK_GPIO17_OUT
+                                                             : ETH_CLOCK_GPIO0_OUT;
+    eth_clock_mode_t usedClk = first;
+    bool ethOk = ethBeginWithClock(first);
+    if (!ethOk) {
+      logi("ETH clock mode %d failed; retrying mode %d", (int)first, (int)second);
+      ETH.end();
+      delay(300);
+      usedClk = second;
+      ethOk = ethBeginWithClock(second);
     }
+    if (ethOk) {
+      logi("ETH.begin OK (clock mode %d)", (int)usedClk);
+      // Make Ethernet the preferred default route. By default WiFi STA has a higher
+      // stack route priority (100) than ETH (50), so with both interfaces up the
+      // stack would egress via WiFi even though the app treats ETH as primary
+      // (activeNet()). Bump ETH above WiFi once; the stack then auto-selects ETH as
+      // the default whenever its link/IP is up and falls back to WiFi when ETH
+      // drops -- no per-event pointer juggling, and no interface teardown.
+      ETH.setRoutePrio(200);
+      if (savedClk != (uint8_t)usedClk) {
+        ethPrefs.putUChar("clk", (uint8_t)usedClk);         // remember the winner
+        logi("Persisted working ETH clock mode %d for next boot", (int)usedClk);
+      }
+    } else {
+      loge("ETH.begin failed on both clocks -- continuing on Wi-Fi");
+    }
+    ethPrefs.end();
     ETH.setHostname(AP_SSID);
     delay(100);
 
@@ -323,14 +375,18 @@ void networkSetup() {
     WiFi.begin("Wokwi-GUEST", "", 6);
   }
 
-  // Static IP Setup
+  // Static IP Setup. Ethernet is the primary interface, so the device's static IP
+  // binds to ETH on real hardware; WiFi stays on DHCP as the fallback. (Applying it
+  // to WiFi instead would put the fixed address on the non-preferred interface while
+  // ETH -- the default route -- ran on DHCP.) The simulator has no ETH, so there it
+  // configures WiFi.
   if (settings.staticIP && settings.staticIPAddr[0] != 255) {
-    logi("Configuring static IP: %s", settings.staticIPAddr.toString().c_str());
-    if( getSSID() == "" ) {
-      // No WiFi SSID configured -> we are on Ethernet (see "prefer Ethernet" below)
-      ETH.config(settings.staticIPAddr, settings.staticGateway, settings.staticSubnetMask);
-    } else {
+    logi("Configuring static IP on %s: %s", InSimulator ? "WiFi" : "ETH",
+         settings.staticIPAddr.toString().c_str());
+    if (InSimulator) {
       WiFi.config(settings.staticIPAddr, settings.staticGateway, settings.staticSubnetMask);
+    } else {
+      ETH.config(settings.staticIPAddr, settings.staticGateway, settings.staticSubnetMask);
     }
   }
 }
@@ -368,11 +424,14 @@ bool networkUp() {
   return ethUp() || wifiUp() || hotspotUp();
 }
 
-// The active interface: prefer Ethernet, fall back to WiFi station. Both are
-// NetworkInterfaces in core 3.x, so every accessor below is one line and the
-// ETH-vs-WiFi choice lives in exactly one place.
+// The active interface = whichever one the network stack has chosen as the default
+// route. We bumped ETH's route priority above WiFi (see ETH.setRoutePrio above), so
+// this is Ethernet when its link is up, WiFi when ETH is down, and the AP when only
+// the hotspot is up -- one source of truth, the same the routing uses. Falls back to
+// WiFi.STA if the stack has no default yet (very early boot).
 static NetworkInterface& activeNet() {
-  return ethUp() ? (NetworkInterface&)ETH : (NetworkInterface&)WiFi.STA;
+  NetworkInterface* def = Network.getDefaultInterface();
+  return def ? *def : (NetworkInterface&)WiFi.STA;
 }
 
 // Fixed to AP_SSID so the name is consistent everywhere: the AP, the mDNS name

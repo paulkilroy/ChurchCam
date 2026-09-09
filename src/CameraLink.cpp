@@ -232,6 +232,17 @@ void camClose( int cameraNumber ) {
   linkClose( cameraNumber );
 }
 
+// Force every camera link closed so the next camConnect() rebuilds it on the
+// current default interface. Called on an ETH<->WiFi handoff: a TCP socket bound
+// to an interface that just went away would otherwise be reused (fd >= 0) and only
+// recover after a failed send/recv. Clearing retryAt lets them reconnect at once.
+void camResetAllLinks() {
+  for ( int i = 0; i <= NUM_CAMERAS; i++ ) {   // include the broadcast slot
+    linkClose( i );
+    cameras[i].retryAt = 0;
+  }
+}
+
 // Source IP / port of the most recent datagram on this link (used by discovery).
 IPAddress camRemoteIP( int cameraNumber ) {
   return cameras[cameraNumber].lastFrom;

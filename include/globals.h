@@ -229,6 +229,7 @@ int camConnect( int cameraNumber );
 int camSend( int cameraNumber, byte packet[], int size );
 int camRecv( int cameraNumber, byte packet[], size_t cap );
 void camClose( int cameraNumber );
+void camResetAllLinks();   // close every camera socket so they rebuild on the current interface
 IPAddress camRemoteIP( int cameraNumber );
 uint16_t camRemotePort( int cameraNumber );
 
