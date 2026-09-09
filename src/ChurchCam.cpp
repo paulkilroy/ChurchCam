@@ -34,10 +34,13 @@ bool InSimulator = false;
 // buttons on 25/26/27.
 struct Pinouts_S Pinouts[REV_MODELS]{
   //                P.  T.  Z. B1. B2. B3 LED RST SLC SDA
-  //  B1/B2/B3 = override / recall1 / recall2. recall1=16 (free GPIO), recall2=34
-  //  (input-only -> needs an external ~10k pull-up to 3V3). Both moved off the
-  //  display's CS(14) and clock, which they used to collide with.
-  { "OLIMEX POE",  33, 35, 36, 32, 16, 34,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
+  //  B1/B2/B3 = override / recall1 / recall2. override=32 (its own digital pin).
+  //  recall1+recall2 share GPIO34 as an ANALOG RESISTOR LADDER (recall1=255 here
+  //  means "no discrete pin" -- read via the ladder on the recall2 pin, 34). This
+  //  frees GPIO16, which is unusable on ESP32-POE-WROVER boards (PSRAM owns 16/17).
+  //  Ladder: onboard R48 10k pull-up on GPIO34; recall1 via 10k, recall2 via 3.3k,
+  //  onboard BUT1 (220R) reads as recall2. See readRecallButtons() in Controller.cpp.
+  { "OLIMEX POE",  33, 35, 36, 32, 255, 34,  2, 255, 16, 13 },  // NOTE LED is on GPIO2 which does nothing on this board
   { "Simulator",   34, 35, 32, 25, 26, 27,  2, 255, 22, 21 },
   // ADC notes (ESP32): ADC2 does NOT work while WiFi is on. ADC1 = GPIO32-39,
   // ADC2 = GPIO0,2,4,12-15,25-27. INPUT_PULLUP works on 14,16-19,21-23,25-27.

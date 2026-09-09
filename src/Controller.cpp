@@ -56,10 +56,17 @@ void cameraControlSetup() {
   pinMode(PIN_PAN, INPUT);
   pinMode(PIN_TILT, INPUT);
   pinMode(PIN_ZOOM, INPUT);
-  pinMode(PIN_RECALL_1, INPUT_PULLUP);
-  pinMode(PIN_RECALL_2, INPUT);        // GPIO34 is input-only (no internal pull-up);
-                                       // the Olimex board already has a 10k pull-up on it.
   pinMode(PIN_OVERRIDE, INPUT_PULLUP);
+  if (HWRev == REV_OLIMEX) {
+    // recall1 + recall2 share GPIO34 as an analog resistor ladder (see the Pinouts
+    // note + readRecallButtons()). GPIO34 is input-only; onboard R48 10k is the
+    // pull-up, so just INPUT. recall1 has no discrete pin here.
+    pinMode(PIN_RECALL_2, INPUT);
+  } else {
+    // Wokwi sim: discrete digital buttons.
+    pinMode(PIN_RECALL_1, INPUT_PULLUP);
+    pinMode(PIN_RECALL_2, INPUT_PULLUP);
+  }
 
   // The camStatusCache array initializer only sets element [0]; seed the rest to
   // CAMERA_NA so the web UI never reads a bogus status for an un-polled camera.
@@ -159,13 +166,40 @@ int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, l
   return -100;
 }
 
+// Recall-ladder thresholds (12-bit ADC on GPIO34). none>3000, recall1 in
+// 1400..3000 (~2048), recall2 <=1400 (~1016, and absorbs onboard BUT1 ~88 and the
+// both-press ~814). Retune from the "recall ladder ADC" log if your resistors differ.
+#define RECALL_LADDER_NONE_MIN 3000
+#define RECALL_LADDER_R1_MIN   1400
+
+// Read the two recall buttons. On the Olimex board they share GPIO34 as a resistor
+// ladder (recall1 via 10k, recall2 via 3.3k, onboard R48 10k pull-up); in the Wokwi
+// sim they are discrete digital pins. r1/r2 are true when pressed.
+static void readRecallButtons(bool &r1, bool &r2) {
+  if (HWRev == REV_OLIMEX) {
+    int v = analogRead(PIN_RECALL_2);   // GPIO34 ladder node
+    static int lastLogged = -1000;
+    if (v < RECALL_LADDER_NONE_MIN && abs(v - lastLogged) > 60) {
+      lastLogged = v;
+      logi("recall ladder ADC=%d", v);   // calibration aid during bring-up
+    }
+    r1 = (v > RECALL_LADDER_R1_MIN && v <= RECALL_LADDER_NONE_MIN);
+    r2 = (v <= RECALL_LADDER_R1_MIN);
+  } else {
+    r1 = (digitalRead(PIN_RECALL_1) == LOW);
+    r2 = (digitalRead(PIN_RECALL_2) == LOW);
+  }
+}
+
 void buttonLoop() {
-  if ( digitalRead(PIN_RECALL_1) == LOW && digitalRead(PIN_RECALL_2) == LOW ) {
-    // autoCalibrate();
-  } else if ( (digitalRead(PIN_RECALL_1) == LOW) && (wasButton1Pressed == false) ) {
+  bool r1, r2;
+  readRecallButtons(r1, r2);
+  if ( r1 && r2 ) {
+    // autoCalibrate();  // both pressed -- reserved (can't occur on the analog ladder)
+  } else if ( r1 && (wasButton1Pressed == false) ) {
     wasButton1Pressed = true;
     button1Override = overridePreview();    // latch intent at press
-  } else if ( (digitalRead(PIN_RECALL_1) == HIGH) && (wasButton1Pressed == true)){
+  } else if ( !r1 && (wasButton1Pressed == true)){
     wasButton1Pressed = false;
     if ( button1Override ) {                // was holding OVERRIDE = save this position
       logi("OVERRIDE + button 1: saving preset 1");
@@ -178,10 +212,10 @@ void buttonLoop() {
       else if (settings.cameraType[getActiveCamera()] == CAM_ONVIF) Onvif_GoToPreset(1);
       notePreset(1, false);
     }
-  } else if ( (digitalRead(PIN_RECALL_2) == LOW) && (wasButton2Pressed == false)) {
+  } else if ( r2 && (wasButton2Pressed == false)) {
     wasButton2Pressed = true;
     button2Override = overridePreview();    // latch intent at press
-  } else if ( (digitalRead(PIN_RECALL_2) == HIGH) && (wasButton2Pressed == true)) {
+  } else if ( !r2 && (wasButton2Pressed == true)) {
     wasButton2Pressed = false;
     if ( button2Override ) {                // was holding OVERRIDE = save this position
       logi("OVERRIDE + button 2: saving preset 2");
