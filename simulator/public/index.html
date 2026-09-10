@@ -104,10 +104,10 @@
 
 <script>
 const VIEWS = [
-  { proto: 'VISCA', sub: 'UDP',  hue: 205 },
-  { proto: 'VISCA', sub: 'TCP',  hue: 280 },
-  { proto: 'ONVIF', sub: 'HTTP', hue: 150 },
-  { proto: 'ONVIF', sub: 'HTTP', hue: 32  },
+  { proto: 'VISCA', sub: 'UDP',  hue: 205, port: 52381 },
+  { proto: 'VISCA', sub: 'TCP',  hue: 280, port: 52382 },
+  { proto: 'ONVIF', sub: 'HTTP', hue: 150, port: 8083, user: 'admin', pass: 'churchcam' },
+  { proto: 'ONVIF', sub: 'HTTP', hue: 32,  port: 8084 },
 ];
 const WORLD_W = 2000, WORLD_H = 1000;
 const RATE = { pan: 1.1, tilt: 0.9, zoom: 0.7 };   // units per second at velocity 1
@@ -126,12 +126,21 @@ const grid = document.getElementById('grid');
 cams.forEach((c) => {
   const wrap = document.createElement('div');
   wrap.className = 'cam';
+  // Connection details to type into the ChurchCam config, shown on the view so you
+  // don't have to dig them out of the code: port always, ONVIF user/pass where auth
+  // is required (Camera 4 is anonymous).
+  let conn = `port ${c.port}`;
+  if (c.user)                 conn += `  ·  ${c.user} / ${c.pass}`;
+  else if (c.proto === 'ONVIF') conn += `  ·  anonymous`;
   wrap.innerHTML = `
     <canvas></canvas>
     <div class="overlay">
-      <div class="row top">
-        <span class="badge ${c.proto.toLowerCase()}">${c.proto} · ${c.sub}</span>
-        <span class="tally" data-tally></span>
+      <div>
+        <div class="row top">
+          <span class="badge ${c.proto.toLowerCase()}">${c.proto} · ${c.sub}</span>
+          <span class="tally" data-tally></span>
+        </div>
+        <div class="conn" style="font-family:var(--mono);font-size:.62rem;color:#d7ecff;letter-spacing:.03em;margin-top:3px;text-shadow:0 1px 3px rgba(0,0,0,.85)">${conn}</div>
       </div>
       <div class="row" style="justify-content:space-between">
         <span class="name">Camera ${c.id + 1}</span>
