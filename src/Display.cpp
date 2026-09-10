@@ -102,9 +102,6 @@ Arduino_DataBus *bus = new Arduino_ESP32SPI(TFT_DC /* DC */, TFT_CS /* CS */, TF
 Arduino_GFX *gfx;              // the double-buffered indexed canvas we draw into
 Arduino_GFX *g_panel;         // the raw ILI9341 behind it, for partial (sub-region) blits
 
-double pi = PI;
-#define arcRadius 80
-double end = 180;
 
 #endif /* !defined(DISPLAY_DEV_KIT) */
 /*******************************************************************************
@@ -114,66 +111,6 @@ double end = 180;
 #define PT_FONT_10 u8g2_font_6x13_tf  // u8g2_font_7x14_tf
 #define PT_FONT_16 u8g2_font_logisoso16_tf // u8g2_font_crox5t_tr
 
-
-void drawStrCenter( String s, int x, int y ) {
-    int16_t x1, y1;
-    uint16_t w, h;
-    gfx->getTextBounds(s,  x,  y,  &x1,  &y1,  &w,  &h);
-    gfx->setCursor(x-w/2, y);
-    gfx->print(s);
-}
-
-void drawPTZ(String v, int x, boolean bold = false) {
-  x = gfx->width() * x / AnalogMax;
-  gfx->drawLine(x, 28, x, 32, WHITE);
-  if ( bold ) {
-    gfx->setFont(PT_FONT_16);                  //????????????????????
-  } else {
-    gfx->setFont(PT_FONT_10);
-  }
-  // PSK was 41
-  drawStrCenter(v, x, 43+((bold==true)?8:0));
-}
-
-void drawP(int x, boolean bold = false) {
-  
-  x = 160.0+(((double)x/(double)AnalogMax)*120.0)-60.0;
-  
-  
-  if ( bold ) {
-    gfx->setFont(PT_FONT_16);                  //????????????????????
-  } else {
-    gfx->setFont(PT_FONT_10);
-  }
-
-  drawStrCenter("P", x, 140);
-}
-void drawT(int y, boolean bold = false) {
-  
-  y = 140.0+(((double)y/(double)AnalogMax)*120.0)-60.0;
-  
-  
-  if ( bold ) {
-    gfx->setFont(PT_FONT_16);                  //????????????????????
-  } else {
-    gfx->setFont(PT_FONT_10);
-  }
-
-  drawStrCenter("T", 160, y);
-}
-
-double zoomRadians(){
-  return (((analogRead(PIN_ZOOM))/4059.0*180.0)+90.0)*(PI/180);
-}
-
-int findArc_X(int angle){
-    return arcRadius*sin(-(zoomRadians())) + 160;
-    
-}
-
-int findArc_Y(int angle){
-    return arcRadius*cos(zoomRadians()) + 140;
-}
 
 void displaySetup() {
   #ifdef GFX_EXTRA_PRE_INIT
@@ -402,6 +339,19 @@ static uint16_t fade565(uint16_t c, uint8_t bright) {
   return (uint16_t)((r << 11) | (g << 5) | b);
 }
 
+// Normalize a joystick axis to [-1,1] pivoting on its calibrated rest center
+// (settings.*Mid) -- the same center the control loop uses -- so recalibrating
+// actually re-centers the radar/zoom on screen. At rest (v == mid) -> 0; the
+// travel below mid maps to [-1,0] and above mid to [0,1].
+static float axisNorm(int v, int mid) {
+  if (mid <= 0) mid = AnalogMax / 2;                       // guard an uncalibrated 0
+  float n;
+  if (v >= mid) n = (AnalogMax - mid) > 0 ? (float)(v - mid) / (float)(AnalogMax - mid) : 0.0f;
+  else          n = (float)(v - mid) / (float)mid;
+  if (n < -1.0f) n = -1.0f; if (n > 1.0f) n = 1.0f;
+  return n;
+}
+
 static void drawRadar(int pan, int tilt, int zoom, int tally) {
   uint16_t col = tally == 2 ? RED : GREEN;
   int cx = 222, cy = 88, r = 56;
@@ -409,8 +359,8 @@ static void drawRadar(int pan, int tilt, int zoom, int tally) {
   gfx->drawCircle(cx, cy, r / 2, COL_TRACK);
   gfx->drawFastHLine(cx - r, cy, 2 * r, COL_TRACK);
   gfx->drawFastVLine(cx, cy - r, 2 * r, COL_TRACK);
-  float pn = (pan  / (float)AnalogMax) * 2.0f - 1.0f;
-  float tn = (tilt / (float)AnalogMax) * 2.0f - 1.0f;
+  float pn = axisNorm(pan,  settings.panMid);
+  float tn = axisNorm(tilt, settings.tiltMid);
   // dy: + tn so pushing the stick up (which reads low on the tilt ADC, same
   // convention the control loop inverts for tiltSpeed) moves the dot UP.
   int dx = cx + (int)(pn * (r - 6)), dy = cy + (int)(tn * (r - 6));
@@ -435,7 +385,8 @@ static void drawRadar(int pan, int tilt, int zoom, int tally) {
 
   int zx = 306, ztop = 32, zh = 110;
   gfx->fillRect(zx + 2, ztop, 3, zh, COL_TRACK);
-  float zn = zoom / (float)AnalogMax; if ( zn < 0 ) zn = 0; if ( zn > 1 ) zn = 1;
+  // Zoom bar: half-full at the calibrated rest center, full up = zoom in, empty = out.
+  float zn = 0.5f + 0.5f * axisNorm(zoom, settings.zoomMid); if ( zn < 0 ) zn = 0; if ( zn > 1 ) zn = 1;
   int fh = (int)(zn * zh);
   gfx->fillRect(zx, ztop + zh - fh, 7, fh, col);
   txt(FONT_TINY, COL_GRAY, zx, ztop + zh + 9, "Z");
