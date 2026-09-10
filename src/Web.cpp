@@ -93,11 +93,16 @@ String processor(const String& var) {
     const char cfmt[] = "{ \"id\": \"%d\", \"status\": \"%s\", \"name\": \"%s\", \"ip\": \"%s\", \"port\": \"%d\", \"type\": \"%d\", \"transport\": \"%d\", \"headers\": \"%d\", \"user\": \"%s\" },\n";
     int cameraNumber = 0;
     for ( uint16_t i = 0; i < NUM_CAMERAS; i++ ) {
+      // Controller camera slot i maps to ATEM video-source i+1 (getActiveCamera():
+      // slot = videoSource - 1; video-source 1 = Input 1 = "CAM1"). Every ATEM
+      // lookup below must use the video-source, not the 0-based slot, or the input
+      // name/type lands one camera off.
+      uint16_t videoSource = i + 1;
       // If no switcher than show all potential inputs...
-      if ( atemSwitcher.isConnected() && !atemSwitcher.isInputInitialized(i) )
+      if ( atemSwitcher.isConnected() && !atemSwitcher.isInputInitialized(videoSource) )
         continue;
       // 0 is an external port input on the ATEM - thats what we want
-      if ( atemSwitcher.isConnected() && atemSwitcher.getInputPortType(i) != 0 )
+      if ( atemSwitcher.isConnected() && atemSwitcher.getInputPortType(videoSource) != 0 )
         continue;
 
       int s = cachedCameraStatus(cameraNumber);   // cache filled by the main loop; no I/O here
@@ -106,8 +111,8 @@ String processor(const String& var) {
       if ( s == CAMERA_DOWN ) status = "down";
       if ( s == CAMERA_OFF ) status = "off";
 
-      String camName = atemSwitcher.getInputShortName(i);
-      if ( camName == "" ) camName = "Camera " + String(i + 1);   // 1-based, matches ATEM CAM1.. and the display
+      String camName = atemSwitcher.getInputShortName(videoSource);
+      if ( camName == "" ) camName = "Camera " + String(i + 1);   // 1-based, matches the controller camera number
       char input[220];
       // Options for camera status
       //    -compute status from responses(?) or just last response
