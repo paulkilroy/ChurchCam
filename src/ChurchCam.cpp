@@ -61,6 +61,20 @@ void setup() {
   delay(1000);
   logi("######################## Serial Started");
 
+  // Pre-create newlib's stdio/UART lock from the main task. The ESP-IDF mDNS
+  // component does a raw printf() from the lwIP/tcpip thread on packet receive; if
+  // that printf is the FIRST use of newlib stdio, the UART VFS lock is created
+  // lazily right there -- and creating a mutex in that context aborts (busy-LAN
+  // mDNS multicast -> crash loop). Our logi() uses a lower-level UART path, so it
+  // never creates that lock. Touching stdio here, up front, creates the lock now
+  // so the tcpip thread just reuses it. (Heap is fine; this is a lock-init-context
+  // bug, not OOM. See the boot-loop investigation: abort() at lock_init_generic
+  // under mdns receive -> vprintf -> uart_write.)
+  printf("\n");
+  fflush(stdout);
+  fputc('\n', stderr);
+  fflush(stderr);
+
   // Determine if we're in the simulator or not; it has a hard-coded MAC address.
   // Read the efuse base MAC directly -- on core 3.x WiFi.macAddress() returns
   // all-zeros until the WiFi stack is started, which is too late here.
