@@ -232,6 +232,25 @@ static esp_err_t handleDiscoverCameras(PsychicRequest* request, PsychicResponse*
   return response->send(200, "application/json", inputs.c_str());
 }
 
+// Discover Blackmagic ATEM switchers on the LAN via mDNS (_blackmagic._tcp), the
+// same query discoverATEM() uses at boot. Returns a JSON array so the config page
+// can offer to fill in the ATEM IP. Read-only -- does not change settings.
+static esp_err_t handleDiscoverATEM(PsychicRequest* request, PsychicResponse* response) {
+  logi("web request for: %s\n", request->uri().c_str());
+  int n = MDNS.queryService("blackmagic", "tcp");
+  String out = "[";
+  for ( int i = 0; i < n; ++i ) {
+    if ( i > 0 ) out += ',';
+    char e[128];
+    snprintf(e, sizeof e, "{\"name\":\"%s\",\"ip\":\"%s\",\"port\":%u}",
+             MDNS.hostname(i).c_str(), MDNS.address(i).toString().c_str(), MDNS.port(i));
+    out += e;
+  }
+  out += "]";
+  logi("ATEM discovery found %d switcher(s): %s", n, out.c_str());
+  return response->send(200, "application/json", out.c_str());
+}
+
 // Save new settings from client into EEPROM and restart. Fields are read by name
 // (getParam returns null when a field wasn't submitted, so only present values
 // change), and the per-camera fields are queried by index.
@@ -376,6 +395,7 @@ void webSetup() {
     return res->send(200, "text/plain", "pong"); });
 
   server.on("/discoverCameras", HTTP_GET, handleDiscoverCameras);
+  server.on("/discoverATEM", HTTP_GET, handleDiscoverATEM);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/restart", HTTP_ANY, handleRestartAndWait);
   server.on("/logData", HTTP_GET, handleLogData);

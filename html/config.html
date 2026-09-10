@@ -364,6 +364,30 @@
       btn.innerHTML = "Discover Cameras";
     }
 
+    // Scan the LAN for a Blackmagic ATEM (mDNS) and fill in its IP.
+    async function scanAtem(btn) {
+      const orig = "Scan for ATEMs";
+      btn.disabled = true;
+      btn.innerHTML =
+        "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Scanning...";
+      let msg = orig;
+      try {
+        if (location.protocol != "file:") {
+          const found = await (await fetch('/discoverATEM')).json();
+          if (found.length > 0) {
+            document.getElementById('atemConfigIP').value = found[0].ip;
+            msg = "Found " + found[0].ip + (found.length > 1 ? " (+" + (found.length - 1) + " more)" : "");
+          } else {
+            msg = "No ATEM found";
+          }
+        }
+      } catch (e) {
+        msg = "Scan failed";
+      }
+      btn.innerHTML = msg;
+      setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 2500);
+    }
+
     function collapseDisable(c) {
       for (let i = 1; i < 5; i++) {
         if (c == i) {
@@ -750,6 +774,9 @@
                   <input name="atemConfigIP" type="text" class="form-control" id="atemConfigIP" placeholder="0.0.0.0" value="%ATEM_IP_ADDR%"
                     minlength="7" maxlength="15" size="15"
                     pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$">
+                  <!-- Scan the LAN for a Blackmagic ATEM and fill in its IP, inline like the firmware buttons -->
+                  <button id="scanAtemButton" type="button" class="btn btn-success btn-lg px-5"
+                    onclick="scanAtem(this)">Scan for ATEMs</button>
                 </div>
 
                 <!-- Button trigger modal -->
