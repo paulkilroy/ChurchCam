@@ -166,11 +166,20 @@ int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, l
   return -100;
 }
 
-// Recall-ladder thresholds (12-bit ADC on GPIO34). none>3000, recall1 in
-// 1400..3000 (~2048), recall2 <=1400 (~1016, and absorbs onboard BUT1 ~88 and the
-// both-press ~814). Retune from the "recall ladder ADC" log if your resistors differ.
+// Recall-ladder thresholds (12-bit ADC on GPIO34), for 10k (recall1) + 3.3k
+// (recall2) legs and the onboard 10k pull-up:
+//   none    > 3000        pull-up only (~4095)
+//   recall1  1400..3000   (~2048)
+//   recall2   900..1400   (~1016)
+//   dead     <= 900        no action
+// Pressing BOTH buttons puts the two resistors in parallel, which pulls the pin
+// LOWER than recall2 alone (~814) -- so a simultaneous press lands in the dead zone
+// and does nothing, rather than mis-firing recall2. The onboard BUT1 (~88) also
+// falls in the dead zone. The recall2/dead split (900) is the tightest gap; retune
+// all three from the "recall ladder ADC" log against your actual resistors.
 #define RECALL_LADDER_NONE_MIN 3000
 #define RECALL_LADDER_R1_MIN   1400
+#define RECALL_LADDER_R2_MIN    900
 
 // Read the two recall buttons. On the Olimex board they share GPIO34 as a resistor
 // ladder (recall1 via 10k, recall2 via 3.3k, onboard R48 10k pull-up); in the Wokwi
@@ -184,7 +193,7 @@ static void readRecallButtons(bool &r1, bool &r2) {
       logi("recall ladder ADC=%d", v);   // calibration aid during bring-up
     }
     r1 = (v > RECALL_LADDER_R1_MIN && v <= RECALL_LADDER_NONE_MIN);
-    r2 = (v <= RECALL_LADDER_R1_MIN);
+    r2 = (v > RECALL_LADDER_R2_MIN && v <= RECALL_LADDER_R1_MIN);   // below R2_MIN = dead (both-press / BUT1)
   } else {
     r1 = (digitalRead(PIN_RECALL_1) == LOW);
     r2 = (digitalRead(PIN_RECALL_2) == LOW);
