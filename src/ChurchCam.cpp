@@ -26,6 +26,7 @@
 bool FirstTimeSetup = false;
 ATEMmin atemSwitcher;
 bool InSimulator = false;
+bool PsramOk = false;   // set in setup(): true only on a WROVER-E with PSRAM up
 
 
 // Indexed by HWRev (REV_OLIMEX / REV_SIM).
@@ -52,6 +53,14 @@ Settings settings;
 void setup() {
   // Start Serial
   Serial.begin(115200);
+
+  // FIRST thing: bring the panel up and paint the "Connecting" screen. The ILI9341
+  // powers on white with its backlight lit, so every millisecond before this shows
+  // as a white screen. Nothing the connecting screen draws needs serial, settings,
+  // or the network, so it goes ahead of the serial-settle delay and everything else.
+  displaySetup();
+  { JoystickState splash = { 0, 0, 0, 0, 0, 0 }; displayLoop(splash); }
+
   /*
   for (int i = 0; i < 20; i++) {
     delay(100);
@@ -74,6 +83,27 @@ void setup() {
   fflush(stdout);
   fputc('\n', stderr);
   fflush(stderr);
+
+  // Board check: this firmware is built with PSRAM (WROVER-E). PSRAM gives the
+  // heap the ~4 MB it needs; without it the device runs on ~300 KB of internal
+  // RAM, runs out of heap within minutes, and crashes (null-deref under OOM).
+  // Flashed onto a WROOM-32UE, PSRAM won't init AND Ethernet is dead (the PSRAM
+  // build claims GPIO17, the WROOM's ETH clock). Shout about it loudly.
+  PsramOk = psramFound() && ESP.getPsramSize() > 0;
+  if (PsramOk) {
+    logi("PSRAM OK: %u KB total, %u KB free (WROVER-E confirmed)",
+         (unsigned)(ESP.getPsramSize() / 1024), (unsigned)(ESP.getFreePsram() / 1024));
+  } else {
+    for (int i = 0; i < 3; i++) {
+      loge("**************************************************************");
+      loge("*  WRONG BOARD -- NO PSRAM DETECTED                          *");
+      loge("*  This build requires a WROVER-E module (PSRAM on 16/17).   *");
+      loge("*  On a WROOM it will run out of heap and crash, and         *");
+      loge("*  Ethernet will NOT work (PSRAM build claims GPIO17).       *");
+      loge("*  Use a WROVER-E, or a WROOM build without -DBOARD_HAS_PSRAM.*");
+      loge("**************************************************************");
+    }
+  }
 
   // Determine if we're in the simulator or not; it has a hard-coded MAC address.
   // Read the efuse base MAC directly -- on core 3.x WiFi.macAddress() returns
@@ -110,7 +140,7 @@ void setup() {
   logi("FirstTimeSetup: %d", FirstTimeSetup);
 
   networkSetup();
-  
+
   cameraControlSetup();
 
   logi("Done");

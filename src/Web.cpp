@@ -145,6 +145,17 @@ String processor(const String& var) {
   else if ( var == "ZOOM_MID" ) return String(settings.zoomMid);
   else if ( var == "BOARD_NAME" ) return Pinouts[HWRev].name;
   else if ( var == "RESTART_MSG" ) return RestartMsg;
+  // Wrong-board banner: empty on a healthy WROVER-E, a loud red alert otherwise.
+  else if ( var == "BOARD_ALERT" ) {
+    if ( PsramOk ) return String();
+    return String(
+      "<div class=\"alert alert-danger\" role=\"alert\">"
+      "<b>&#9888;&#65039; Wrong board &mdash; no PSRAM detected.</b> "
+      "This firmware requires a <b>WROVER-E</b> module. On this board it will run "
+      "low on memory and crash, and Ethernet may not work. Reflash a WROVER-E "
+      "(or build without <code>-DBOARD_HAS_PSRAM</code> for a WROOM-32UE)."
+      "</div>");
+  }
   // Discovered cameras start empty on page load; the list is filled client-side
   // by the /discoverCameras AJAX call when the user clicks "Discover Cameras".
   else if ( var == "DiscoveredCameras" ) return String();
@@ -159,8 +170,29 @@ String processor(const String& var) {
 
 // Broadcast one telemetry frame to every connected /ws client. Called from the
 // camera-control loop; keeps PsychicHttp types out of Controller.cpp.
+//
+// Threading: telemetry is generated on the Arduino loop task, but PsychicHttp adds
+// clients (on connect) and FREES them (on disconnect) on the HTTP server task.
+// Walking that client list with sendAll() from the loop task races those frees and
+// dereferences a dangling client -> LoadProhibited crash. Fix: hand the frame to the
+// server task via httpd_queue_work(), so sendAll() runs in the same context that
+// mutates the list -- no lock, no race. The frame is heap-copied and freed by the
+// worker. wsClients (kept in onOpen/onClose, also on the server task) lets us skip
+// the copy+queue when nobody is listening.
+static volatile int wsClients = 0;
+
+static void telemetryWork(void* arg) {          // runs on the HTTP server task
+  char* buf = (char*)arg;
+  ptzWs.sendAll(HTTPD_WS_TYPE_TEXT, buf, strlen(buf));
+  free(buf);
+}
+
 void broadcastTelemetry(const char* msg) {
-  ptzWs.sendAll(HTTPD_WS_TYPE_TEXT, (void*)msg, strlen(msg));
+  if (wsClients <= 0 || server.server == NULL) return;   // nobody listening / server down
+  char* buf = strdup(msg);                               // small (<256B), freed in worker
+  if (!buf) return;                                      // out of heap: drop this frame
+  if (httpd_queue_work(server.server, telemetryWork, buf) != ESP_OK)
+    free(buf);                                           // queue full: drop, don't leak
 }
 
 // Stream a flash-embedded HTML template through PsychicHttp's TemplatePrinter,
@@ -415,7 +447,11 @@ void webSetup() {
 
   // Joystick / PTZ telemetry WebSocket, on the same port 80 (was mWebSockets:3000).
   ptzWs.onOpen([](PsychicWebSocketClient* client) {
+    wsClients++;   // maintained on the server task; gates broadcastTelemetry()
     logi("ws telemetry client connected: %s", client->remoteIP().toString().c_str()); });
+  ptzWs.onClose([](PsychicWebSocketClient* client) {
+    if (wsClients > 0) wsClients--;
+    logi("ws telemetry client disconnected"); });
   ptzWs.onFrame([](PsychicWebSocketRequest* req, httpd_ws_frame_t* frame) -> esp_err_t {
     return ESP_OK;   // browser only receives telemetry; inbound frames ignored
   });

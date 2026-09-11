@@ -166,24 +166,23 @@ int mapOffset(long value, long leftMin, long mid, long leftMax, long rightMin, l
   return -100;
 }
 
-// Recall-ladder thresholds (12-bit ADC on GPIO34), for 10k (recall1) + 3.3k
-// (recall2) legs and the onboard 10k pull-up:
+// Recall-ladder thresholds (12-bit ADC on GPIO34), for the simplified one-resistor
+// wiring: recall1 is a bare button (GPIO34 -> GND, no resistor), recall2 has a single
+// 10k leg to GND, and the onboard 10k pull-up (R48) holds the pin high at rest:
 //   none    > 3000        pull-up only (~4095)
-//   recall1  1400..3000   (~2048)
-//   recall2   900..1400   (~1016)
-//   dead     <= 900        no action
-// Pressing BOTH buttons puts the two resistors in parallel, which pulls the pin
-// LOWER than recall2 alone (~814) -- so a simultaneous press lands in the dead zone
-// and does nothing, rather than mis-firing recall2. The onboard BUT1 (~88) also
-// falls in the dead zone. The recall2/dead split (900) is the tightest gap; retune
-// all three from the "recall ladder ADC" log against your actual resistors.
+//   recall2  1200..3000   (~2048, single 10k leg)
+//   recall1  <= 1200      (~0, dead short; the onboard BUT1 ~88 lands here too)
+// recall1 is the hard pull to ground, so it always wins: pressing BOTH at once reads
+// ~0 and fires recall1 (there is no both-press dead zone in this scheme). The onboard
+// BUT1 is a spare recall1. The recall1/recall2 split (1200) sits midway between ~0 and
+// ~2048 -- lots of margin; retune from the "recall ladder ADC" log if your leg differs.
 #define RECALL_LADDER_NONE_MIN 3000
-#define RECALL_LADDER_R1_MIN   1400
-#define RECALL_LADDER_R2_MIN    900
+#define RECALL_LADDER_R2_MIN   1200
 
-// Read the two recall buttons. On the Olimex board they share GPIO34 as a resistor
-// ladder (recall1 via 10k, recall2 via 3.3k, onboard R48 10k pull-up); in the Wokwi
-// sim they are discrete digital pins. r1/r2 are true when pressed.
+// Read the two recall buttons. On the Olimex board they share GPIO34: recall1 is a bare
+// button to GND, recall2 has a single 10k leg to GND, and the onboard R48 10k pull-up
+// holds the pin high at rest. In the Wokwi sim they are discrete digital pins. r1/r2 are
+// true when pressed.
 static void readRecallButtons(bool &r1, bool &r2) {
   if (HWRev == REV_OLIMEX) {
     int v = analogRead(PIN_RECALL_2);   // GPIO34 ladder node
@@ -192,8 +191,8 @@ static void readRecallButtons(bool &r1, bool &r2) {
       lastLogged = v;
       logi("recall ladder ADC=%d", v);   // calibration aid during bring-up
     }
-    r1 = (v > RECALL_LADDER_R1_MIN && v <= RECALL_LADDER_NONE_MIN);
-    r2 = (v > RECALL_LADDER_R2_MIN && v <= RECALL_LADDER_R1_MIN);   // below R2_MIN = dead (both-press / BUT1)
+    r1 = (v <= RECALL_LADDER_R2_MIN);                                 // ~0 dead short (onboard BUT1 lands here too)
+    r2 = (v > RECALL_LADDER_R2_MIN && v <= RECALL_LADDER_NONE_MIN);   // ~2048 single 10k leg
   } else {
     r1 = (digitalRead(PIN_RECALL_1) == LOW);
     r2 = (digitalRead(PIN_RECALL_2) == LOW);
@@ -208,8 +207,10 @@ void buttonLoop() {
   } else if ( r1 && (wasButton1Pressed == false) ) {
     wasButton1Pressed = true;
     button1Override = overridePreview();    // latch intent at press
+    notePresetHeld(1, true);                // pending pill while held (recall fires on release)
   } else if ( !r1 && (wasButton1Pressed == true)){
     wasButton1Pressed = false;
+    notePresetHeld(1, false);               // clear pending; confirmation pill follows
     if ( button1Override ) {                // was holding OVERRIDE = save this position
       logi("OVERRIDE + button 1: saving preset 1");
       if (isVisca(getActiveCamera())) visca_set_memory(1);
@@ -224,8 +225,10 @@ void buttonLoop() {
   } else if ( r2 && (wasButton2Pressed == false)) {
     wasButton2Pressed = true;
     button2Override = overridePreview();    // latch intent at press
+    notePresetHeld(2, true);                // pending pill while held (recall fires on release)
   } else if ( !r2 && (wasButton2Pressed == true)) {
     wasButton2Pressed = false;
+    notePresetHeld(2, false);               // clear pending; confirmation pill follows
     if ( button2Override ) {                // was holding OVERRIDE = save this position
       logi("OVERRIDE + button 2: saving preset 2");
       if (isVisca(getActiveCamera())) visca_set_memory(2);

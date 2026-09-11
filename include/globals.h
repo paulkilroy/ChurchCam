@@ -156,6 +156,7 @@ extern int AnalogMax;
 extern ATEMmin atemSwitcher;
 extern char ssid[];
 extern bool InSimulator;
+extern bool PsramOk;   // false = wrong module (no PSRAM) -- see setup() board check
 extern struct Pinouts_S Pinouts[];
 extern struct Settings settings;
 extern struct LogItem LogItems[];
@@ -168,6 +169,7 @@ void broadcastTelemetry(const char* msg);   // push a telemetry frame to /ws cli
 extern volatile uint32_t g_txCount;          // packets sent (display TX histogram)
 extern bool WiFiWorked;                      // WiFi has connected at least once (connecting vs reconnecting)
 void notePreset(int num, bool isSet);        // latch a preset recall/save for the display's button pill
+void notePresetHeld(int num, bool held);     // latch a held recall button for a pending pill
 extern volatile bool g_otaActive;            // firmware update in progress (display shows the OTA screen)
 extern volatile uint32_t g_otaBytes;         // bytes written so far during OTA
 extern volatile uint32_t g_otaLastChunk;     // millis() of the last received OTA chunk (stuck detection)

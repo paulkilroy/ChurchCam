@@ -113,6 +113,9 @@ Arduino_GFX *g_panel;         // the raw ILI9341 behind it, for partial (sub-reg
 
 
 void displaySetup() {
+  static bool done = false;   // idempotent: setup() brings the panel up early to show
+  if ( done ) return;         // the splash before networkSetup(); cameraControlSetup()
+  done = true;                // then calls this again -- a harmless no-op.
   #ifdef GFX_EXTRA_PRE_INIT
   GFX_EXTRA_PRE_INIT();
   #endif
@@ -250,9 +253,16 @@ static uint32_t presetAt = 0;       // recall -> header pill flash
 static int presetNum = 0;
 static uint32_t presetSaveAt = 0;   // save   -> full-screen confirmation popup
 static int presetSaveNum = 0;
+static int presetHeldNum = 0;       // >0 while a recall button is held (pending pill)
 void notePreset(int num, bool isSet) {
   if ( isSet ) { presetSaveAt = millis(); presetSaveNum = num; }
   else         { presetAt = millis();     presetNum = num; }
+}
+// Latched on button-down / cleared on release: gives immediate "PRESET n" feedback
+// while the button is held (the recall itself still fires on release). A held OVERRIDE
+// shows its own pill instead, so this only surfaces for a plain recall.
+void notePresetHeld(int num, bool held) {
+  presetHeldNum = held ? num : 0;
 }
 
 static void drawHeader(int active) {
@@ -272,7 +282,11 @@ static void drawHeader(int active) {
     char b[20]; snprintf(b, sizeof(b), "OVERRIDE %d", active + 1);
     gfx->fillRoundRect(150, 2, 164, 21, 3, RED);
     txtBoxC(FONT_MD, WHITE, 150, 2, 164, 21, b);
-  } else if ( preset ) {
+  } else if ( presetHeldNum ) {                  // button held down -- pending, amber
+    char b[20]; snprintf(b, sizeof(b), "PRESET %d", presetHeldNum);
+    gfx->fillRoundRect(150, 2, 164, 21, 3, COL_AMBER);
+    txtBoxC(FONT_MD, BLACK, 150, 2, 164, 21, b);
+  } else if ( preset ) {                         // released -- confirmation, green
     char b[20]; snprintf(b, sizeof(b), "PRESET %d RECALL", presetNum);
     gfx->fillRoundRect(150, 2, 164, 21, 3, GREEN);
     txtBoxC(FONT_MD, BLACK, 150, 2, 164, 21, b);
