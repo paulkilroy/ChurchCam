@@ -44,6 +44,7 @@ static int      camStatusCache[NUM_CAMERAS];
 static int      camPollIdx = 0;
 static uint32_t lastStatusPollAt = 0;
 #define STATUS_POLL_INTERVAL_MS 1000  // one camera per tick; full 8-slot sweep ~8s
+#define IDLE_SETTLE_MS 500            // stick must rest this long before a (blocking) status poll
 
 void cameraControlSetup() {
   analogReadResolution(ANALOG_RESOLUTION);  // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
@@ -289,10 +290,19 @@ void cameraControlLoop() {
 
   // Refresh the camera-status cache from this (main-loop) task, so the async web
   // handler never touches a camera socket concurrently with camera driving.
-  // cameraStatus() does blocking socket I/O (up to ~800ms for a down VISCA-UDP
-  // camera), so only poll while idle -- never mid-drive, where it would stall
-  // the joystick.
-  if ( idle ) pollCameraStatus();
+  // cameraStatus() does BLOCKING socket I/O (hundreds of ms for a down camera) on
+  // this task, so it must never run mid-motion. "idle" alone isn't enough: sweeping
+  // the stick through centre while reversing direction is momentarily idle, and a
+  // poll firing there froze the joystick ("reverse off a hard stop and it stalls").
+  // Require the stick to be at REST for a short settle first -- quick reversals never
+  // trip it; a genuine pause does, invisibly (nothing is moving).
+  static uint32_t idleSince = 0;
+  if ( idle ) {
+    if ( idleSince == 0 ) idleSince = millis();
+    if ( millis() - idleSince > IDLE_SETTLE_MS ) pollCameraStatus();
+  } else {
+    idleSince = 0;
+  }
 
   // the last part of this if statement inserts a bit of delay if needed before sending the next command
   // only once MAX_SEND ms -- 100ms max UNLESS YOU ARE TRYING TO STOP THE CAMMERA -- then do that ASAP
