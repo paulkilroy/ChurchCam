@@ -1,0 +1,309 @@
+<title>ChurchCam Operator Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --paper:#ffffff; --ink:#1b1f24; --muted:#5c6a72; --faint:#8b98a0;
+    --line:#d7dee2; --line-soft:#e8edf0;
+    --accent:#0d6e8c; --accent-bg:#e3f1f6;
+    --go:#1f9d55; --go-bg:#e6f5ec; --go-line:#bfe6cf;
+    --stop:#d92d20; --stop-bg:#fdeceb; --stop-line:#f6c9c5;
+    --adv:#7a3fb0; --adv-bg:#f2e9fa; --adv-line:#dcc7ee;
+    --app:#eef1f3;
+  }
+  @media (prefers-color-scheme:dark){ :root:not([data-theme="light"]){ --app:#0e1215; } }
+  :root[data-theme="dark"]{ --app:#0e1215; }
+  *{box-sizing:border-box} html,body{margin:0}
+  body{background:var(--app);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
+    line-height:1.35;-webkit-font-smoothing:antialiased;padding:22px 16px}
+  .sheet{width:8.5in;max-width:100%;margin:0 auto;background:var(--paper);border:1px solid var(--line);
+    border-radius:10px;box-shadow:0 10px 40px rgba(20,30,40,.16);padding:0.36in 0.42in 0.28in;overflow:hidden}
+  h1,h2,h3,.step-n,.eyebrow{font-family:"Barlow Semi Condensed","IBM Plex Sans",sans-serif}
+  kbd{font-family:"IBM Plex Mono",ui-monospace,monospace}
+
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:3px solid var(--accent);padding-bottom:7px;margin-bottom:10px}
+  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:0 0 1px}
+  h1{font-size:30px;font-weight:800;letter-spacing:-.01em;line-height:.98;margin:0}
+  h1 .live{color:var(--stop)}
+  .tagline{font-size:11.5px;color:var(--muted);text-align:right;max-width:32ch;line-height:1.3}
+  .tagline b{color:var(--ink)}
+
+  .sec-h{display:flex;align-items:center;gap:9px;margin:0 0 7px}
+  .sec-h .num{width:21px;height:21px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center;flex:none}
+  .sec-h h2{font-size:15.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin:0}
+  .block{margin-bottom:10px}
+
+  .setup3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:11px}
+  .scard{border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden;display:flex;flex-direction:column}
+  .sgfx{background:var(--accent-bg);border-bottom:1px solid var(--line-soft);padding:6px;display:flex;align-items:center;justify-content:center;min-height:60px}
+  .sgfx svg{height:54px;width:auto;max-width:100%}
+  .sbody{padding:8px 11px 9px}
+  .sbody h3{font-size:12.5px;margin:0 0 3px;font-weight:700}
+  .sbody p{margin:0;font-size:11px;color:var(--muted)} .sbody p b{color:var(--ink)}
+
+  .camrow{display:grid;grid-template-columns:192px 1fr;gap:14px;align-items:start}
+  figure{margin:0}
+  .remote{background:var(--accent-bg);border:1px solid var(--line);border-radius:9px;padding:7px 7px 4px}
+  .remote svg{display:block;width:100%;height:auto}
+  figcaption{font-size:10.2px;color:var(--muted);text-align:center;margin-top:3px;line-height:1.32}
+  figcaption b{color:var(--ink)}
+  .atemfig{border:1px solid var(--line);border-radius:9px;background:#fbfcfd;padding:6px 9px;margin-bottom:9px}
+  .atemfig .lbl{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.05em;margin:0 0 3px}
+  .atemfig svg{display:block;width:230px;max-width:100%;height:auto;margin:0 auto}
+
+  .steps2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .card{border:1px solid var(--line);border-radius:9px;padding:7px 10px 8px;background:#fbfcfd}
+  .card .step-n{font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.04em}
+  .card h3{font-size:12.5px;margin:1px 0 3px;font-weight:700;line-height:1.05}
+  .card p{margin:0;font-size:11px;color:var(--muted)} .card p b{color:var(--ink)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .panel{border-radius:10px;padding:9px 12px 10px;border:1.5px solid}
+  .panel.go{background:var(--go-bg);border-color:var(--go-line)} .panel.stop{background:var(--stop-bg);border-color:var(--stop-line)}
+  .panel .p-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .panel .dot{width:12px;height:12px;border-radius:50%;flex:none}
+  .panel.go .dot{background:var(--go)} .panel.stop .dot{background:var(--stop);box-shadow:0 0 0 3px var(--stop-bg),0 0 0 4px var(--stop-line)}
+  .panel h2{font-size:14.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;margin:0}
+  .panel.go h2{color:var(--go)} .panel.stop h2{color:var(--stop)}
+  .p-body{display:flex;gap:11px;align-items:flex-start}
+  .p-body .atem{flex:none;width:150px}
+  .p-body .atem svg{display:block;width:100%;height:auto}
+  ol.mini{margin:0;padding-left:0;list-style:none;counter-reset:s;flex:1}
+  ol.mini li{position:relative;padding:2px 0 3px 21px;font-size:11.6px;counter-increment:s;border-bottom:1px solid rgba(0,0,0,.05)}
+  ol.mini li:last-child{border-bottom:none}
+  ol.mini li::before{content:counter(s);position:absolute;left:0;top:2px;width:16px;height:16px;border-radius:50%;font-size:10px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center}
+  .panel.go ol.mini li::before{background:var(--go)} .panel.stop ol.mini li::before{background:var(--stop)}
+  ol.mini b{font-weight:700}
+
+  kbd{display:inline-block;font-size:11px;font-weight:600;padding:1px 6px;border-radius:5px;border:1px solid var(--line);background:#f2f5f7;color:var(--ink);white-space:nowrap;line-height:1.5}
+  kbd.go{background:var(--go-bg);border-color:var(--go-line);color:var(--go)}
+  kbd.stop{background:var(--stop-bg);border-color:var(--stop-line);color:var(--stop)}
+  kbd.adv{background:var(--adv-bg);border-color:var(--adv-line);color:var(--adv)}
+
+  .adv-wrap{background:var(--adv-bg);border:1.5px solid var(--adv-line);border-radius:10px;padding:9px 12px}
+  .adv-head{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .adv-head .tag{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--adv);padding:2px 8px;border-radius:20px}
+  .adv-head span{font-size:11px;color:var(--adv);font-weight:600}
+  .adv-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  .adv-grid h3{font-size:12.5px;margin:0 0 2px;color:var(--adv);font-weight:700}
+  .adv-grid p{margin:0;font-size:11px;color:#4a3960} .adv-grid p b{color:#2e2140}
+
+  footer{margin-top:9px;padding-top:6px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;font-size:10.3px;color:var(--faint)}
+  footer b{color:var(--muted)}
+
+  @keyframes joywig{0%,100%{transform:translate(0,0)}20%{transform:translate(-7px,4px)}45%{transform:translate(-9px,-4px)}70%{transform:translate(3px,7px)}}
+  .knob2{animation:joywig 2.8s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){ .knob2{animation:none} }
+
+  @media (max-width:720px){ .setup3,.adv-grid,.grid2,.steps2{grid-template-columns:1fr} .camrow{grid-template-columns:1fr} .tagline{text-align:left} }
+  @page{ size:letter portrait; margin:0.35in; }
+  @media print{ html,body{background:#fff} body{padding:0} .sheet{width:auto;max-width:none;border:none;border-radius:0;box-shadow:none;padding:0} *{-webkit-print-color-adjust:exact;print-color-adjust:exact} .knob2{animation:none} }
+</style>
+
+<div class="sheet">
+  <header>
+    <div><p class="eyebrow">Camera &amp; Stream · Operator Sheet</p><h1>Going <span class="live">Live</span></h1></div>
+    <p class="tagline">Run the cameras and the YouTube stream, start to finish. <b>Keep this at the desk.</b></p>
+  </header>
+
+  <!-- 1 · BEFORE -->
+  <div class="block">
+    <div class="sec-h"><span class="num">1</span><h2>Before the service</h2></div>
+    <div class="setup3">
+      <!-- power -->
+      <div class="scard">
+        <div class="sgfx">
+          <svg viewBox="0 0 120 60" role="img" aria-label="A power strip with its switch turned on and glowing green.">
+            <rect x="8" y="30" width="104" height="24" rx="8" fill="#2f363c" stroke="#1b1f24" stroke-width="1.5"/>
+            <polygon points="24,6 17,17 22,17 20,28 29,15 23,15 27,6" fill="#f2c94c" stroke="#c99700" stroke-width="0.8"/>
+            <circle cx="24" cy="42" r="12" fill="#1f9d55" opacity="0.28"/>
+            <rect x="16" y="34" width="16" height="16" rx="3" fill="#1f9d55"/><rect x="18" y="36" width="12" height="5" rx="2" fill="#7ee0a6"/>
+            <g fill="#48525a"><rect x="48" y="36" width="14" height="14" rx="3"/><rect x="70" y="36" width="14" height="14" rx="3"/><rect x="92" y="36" width="14" height="14" rx="3"/></g>
+            <g fill="#20262b"><circle cx="53" cy="41" r="1.5"/><circle cx="57" cy="41" r="1.5"/><circle cx="75" cy="41" r="1.5"/><circle cx="79" cy="41" r="1.5"/><circle cx="97" cy="41" r="1.5"/><circle cx="101" cy="41" r="1.5"/></g>
+          </svg>
+        </div>
+        <div class="sbody"><h3>Turn on the power</h3>
+          <p>Flip on the <b>power strips</b>. The ATEM, remote, and cameras all come on — check their lights.</p></div>
+      </div>
+      <!-- PC / YouTube -->
+      <div class="scard">
+        <div class="sgfx">
+          <svg viewBox="0 0 120 60" role="img" aria-label="A browser on the YouTube Studio Stream page.">
+            <rect x="2" y="2" width="116" height="56" rx="5" fill="#ffffff" stroke="#c9d3d8"/>
+            <rect x="2" y="2" width="116" height="11" rx="5" fill="#eef2f4"/>
+            <circle cx="9" cy="6.5" r="1.8" fill="#e0574f"/><circle cx="15" cy="6.5" r="1.8" fill="#e8b73c"/><circle cx="21" cy="6.5" r="1.8" fill="#5bbd77"/>
+            <rect x="28" y="3.5" width="86" height="7" rx="3.5" fill="#dbe3e7"/>
+            <text x="32" y="9" font-size="4.6" fill="#7a878e" font-family="'IBM Plex Mono',monospace">studio.youtube.com</text>
+            <rect x="8" y="18" width="66" height="36" rx="3" fill="#11161a"/>
+            <polygon points="36,30 36,42 48,36" fill="#fff" opacity="0.85"/>
+            <rect x="12" y="45" width="26" height="6" rx="3" fill="#d92d20"/><text x="17" y="49.8" font-size="4.4" fill="#fff" font-weight="700" font-family="'Barlow Semi Condensed',sans-serif">● LIVE</text>
+            <text x="82" y="26" font-size="6.4" font-weight="700" fill="#1b1f24" font-family="'Barlow Semi Condensed',sans-serif">YouTube</text>
+            <text x="82" y="34" font-size="6.4" font-weight="700" fill="#1b1f24" font-family="'Barlow Semi Condensed',sans-serif">Studio</text>
+          </svg>
+        </div>
+        <div class="sbody"><h3>Turn on the PC</h3>
+          <p>In the <b>web browser</b>, <b>YouTube Studio</b> opens by itself to the <b>Stream</b> page. Make sure it's up.</p></div>
+      </div>
+      <!-- test joystick -->
+      <div class="scard">
+        <div class="sgfx">
+          <svg viewBox="0 0 120 60" role="img" aria-label="A joystick with its knob moving to show you should push it to test it.">
+            <ellipse cx="60" cy="52" rx="22" ry="4" fill="#cdd7db" opacity="0.7"/>
+            <circle cx="60" cy="34" r="21" fill="#f2f6f8" stroke="#1b1f24" stroke-width="2"/>
+            <g fill="none" stroke="#8fb0bd" stroke-width="1.6" stroke-linecap="round">
+              <path d="M60 6 v6 M60 62 v-6 M32 34 h6 M88 34 h-6"/>
+            </g>
+            <g class="knob2"><circle cx="70" cy="26" r="10" fill="#0d6e8c" stroke="#0a5568" stroke-width="1.5"/><circle cx="66" cy="22" r="2.6" fill="#8fd0e4"/></g>
+          </svg>
+        </div>
+        <div class="sbody"><h3>Test the remote</h3>
+          <p>Push the <b>joystick</b> — the <b>preview camera</b> should move. That's it, you're ready.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2 · RUN THE CAMERAS -->
+  <div class="block">
+    <div class="sec-h"><span class="num">2</span><h2>Run the cameras</h2></div>
+    <div class="camrow">
+      <figure class="remote">
+        <svg viewBox="0 0 240 350" role="img" aria-label="The camera remote, top view, upright. The screen is at the top. In the middle is the joystick: the tilt arrows point up and down inside the joystick circle; the pan arrows point left and right just below it; a curved double arrow shows the twist for zoom. Three buttons run along the bottom: OVERRIDE on the left is silver, then RECALL 1 and RECALL 2 in black.">
+          <rect x="20" y="8" width="200" height="334" rx="24" fill="#ffffff" stroke="#1b1f24" stroke-width="2"/>
+          <rect x="59" y="28" width="122" height="92" rx="7" fill="#0f2a33"/>
+          <text x="69" y="47" font-size="12" font-weight="700" fill="#eaf6fb" font-family="'IBM Plex Mono',monospace">CAM 2</text>
+          <rect x="126" y="36" width="46" height="14" rx="3" fill="#d92d20"/>
+          <text x="149" y="46" text-anchor="middle" font-size="8" font-weight="700" fill="#fff" font-family="'Barlow Semi Condensed',sans-serif">ON AIR</text>
+          <circle cx="84" cy="90" r="15" fill="none" stroke="#3f6b78" stroke-width="1.3"/><circle cx="89" cy="85" r="3.3" fill="#38d07f"/>
+          <text x="107" y="93" font-size="8" fill="#93b3bd" font-family="'IBM Plex Mono',monospace">position</text>
+          <text x="120" y="135" text-anchor="middle" font-size="9.5" font-weight="700" fill="#0d6e8c" font-family="'Barlow Semi Condensed',sans-serif">SCREEN — camera &amp; on-air</text>
+          <!-- JOYSTICK -->
+          <circle cx="120" cy="192" r="46" fill="#f2f6f8" stroke="#1b1f24" stroke-width="2"/>
+          <circle cx="120" cy="192" r="18" fill="#cfe0e7" stroke="#1b1f24" stroke-width="1.5"/>
+          <defs>
+            <marker id="up" markerWidth="12" markerHeight="12" refX="6" refY="2" orient="0" markerUnits="userSpaceOnUse"><polygon points="2 11,6 2,10 11" fill="#b98600"/></marker>
+            <marker id="dn" markerWidth="12" markerHeight="12" refX="6" refY="10" orient="0" markerUnits="userSpaceOnUse"><polygon points="2 1,6 10,10 1" fill="#b98600"/></marker>
+            <marker id="lf" markerWidth="12" markerHeight="12" refX="2" refY="6" orient="0" markerUnits="userSpaceOnUse"><polygon points="11 2,2 6,11 10" fill="#1f9d55"/></marker>
+            <marker id="rt" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="0" markerUnits="userSpaceOnUse"><polygon points="1 2,10 6,1 10" fill="#1f9d55"/></marker>
+            <marker id="zs" markerWidth="9" markerHeight="9" refX="6" refY="4" orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points="0 0,8 4,0 8" fill="#1f6fd0"/></marker>
+            <marker id="ze" markerWidth="9" markerHeight="9" refX="6" refY="4" orient="auto" markerUnits="userSpaceOnUse"><polygon points="0 0,8 4,0 8" fill="#1f6fd0"/></marker>
+          </defs>
+          <!-- tilt: UP + DOWN inside the circle -->
+          <path d="M120 172 V158" stroke="#b98600" stroke-width="2.6" marker-end="url(#up)"/>
+          <path d="M120 212 V226" stroke="#b98600" stroke-width="2.6" marker-end="url(#dn)"/>
+          <text x="136" y="166" font-size="8" font-weight="700" fill="#b98600" font-family="'IBM Plex Mono',monospace">TILT</text>
+          <!-- zoom: curved double arrow (twist), on the right of the knob -->
+          <path d="M137 173 A25 25 0 0 1 144 204" stroke="#1f6fd0" stroke-width="2.4" fill="none" marker-start="url(#zs)" marker-end="url(#ze)"/>
+          <!-- pan: LEFT + RIGHT below the circle -->
+          <path d="M80 256 H160" stroke="#1f9d55" stroke-width="2.6" marker-start="url(#lf)" marker-end="url(#rt)"/>
+          <text x="120" y="252" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1f9d55" font-family="'IBM Plex Mono',monospace">PAN</text>
+          <text x="120" y="272" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1f6fd0" font-family="'IBM Plex Mono',monospace">↻ twist = ZOOM</text>
+          <!-- BUTTONS -->
+          <circle cx="66" cy="296" r="17" fill="#dfe4e8" stroke="#9aa6ad" stroke-width="2"/>
+          <text x="66" y="300" text-anchor="middle" font-size="9" font-weight="700" fill="#4a555c" font-family="'IBM Plex Mono',monospace">OVR</text>
+          <circle cx="120" cy="296" r="17" fill="#23282c" stroke="#4a555c" stroke-width="2"/>
+          <text x="120" y="300" text-anchor="middle" font-size="10" font-weight="700" fill="#eef3f5" font-family="'IBM Plex Mono',monospace">R1</text>
+          <circle cx="174" cy="296" r="17" fill="#23282c" stroke="#4a555c" stroke-width="2"/>
+          <text x="174" y="300" text-anchor="middle" font-size="10" font-weight="700" fill="#eef3f5" font-family="'IBM Plex Mono',monospace">R2</text>
+        </svg>
+        <figcaption>Your remote, upright — moves the <b>Preview</b> camera. Buttons: <b>OVR</b> = Override (silver) · <b>R1 / R2</b> = Recall (black).</figcaption>
+      </figure>
+
+      <div>
+        <div class="atemfig">
+          <p class="lbl">On the ATEM</p>
+          <svg viewBox="0 0 210 80" role="img" aria-label="The ATEM switcher. Press a numbered camera button to load it on Preview, then press CUT to send it live.">
+            <defs><marker id="cd" markerWidth="11" markerHeight="11" refX="5.5" refY="9" orient="0" markerUnits="userSpaceOnUse"><polygon points="1.5 1,5.5 9,9.5 1" fill="#0d6e8c"/></marker></defs>
+            <rect x="2" y="24" width="206" height="54" rx="9" fill="#23292e"/>
+            <rect x="10" y="46" width="26" height="26" rx="4" fill="#e7edf0"/><text x="23" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">1</text>
+            <rect x="40" y="46" width="26" height="26" rx="4" fill="#5bbd77"/><text x="53" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#0d2416" font-family="'Barlow Semi Condensed',sans-serif">2</text>
+            <rect x="70" y="46" width="26" height="26" rx="4" fill="#e7edf0"/><text x="83" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">3</text>
+            <rect x="100" y="46" width="26" height="26" rx="4" fill="#e7edf0"/><text x="113" y="64" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">4</text>
+            <rect x="150" y="46" width="50" height="26" rx="4" fill="#0d6e8c"/><text x="175" y="64" text-anchor="middle" font-size="11" font-weight="800" fill="#fff" font-family="'Barlow Semi Condensed',sans-serif">CUT</text>
+            <text x="68" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#0d6e8c" font-family="'Barlow Semi Condensed',sans-serif">① pick a camera</text>
+            <path d="M68 16 V42" stroke="#0d6e8c" stroke-width="1.8" marker-end="url(#cd)"/>
+            <text x="175" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="#0d6e8c" font-family="'Barlow Semi Condensed',sans-serif">③ CUT = live</text>
+            <path d="M175 16 V42" stroke="#0d6e8c" stroke-width="1.8" marker-end="url(#cd)"/>
+          </svg>
+        </div>
+        <div class="steps2">
+          <div class="card"><div class="step-n">STEP 1</div><h3>Pick the next shot</h3>
+            <p>Press a camera on the <b>ATEM</b>. It loads onto <b>Preview</b> — the remote's screen switches to it.</p></div>
+          <div class="card"><div class="step-n">STEP 2</div><h3>Frame it</h3>
+            <p>Use the <b>joystick</b> to pan, tilt, zoom, or tap <kbd>R1</kbd> / <kbd>R2</kbd> for a saved shot.</p></div>
+          <div class="card"><div class="step-n">STEP 3</div><h3>Put it live</h3>
+            <p>When it looks right, press <kbd>CUT</kbd> on the ATEM to send Preview to <b>Program (live)</b>.</p></div>
+          <div class="card"><div class="step-n">STEP 4</div><h3>Get ready again</h3>
+            <p>While that camera is live, load the <b>next</b> one on Preview and frame it. Stay one shot ahead.</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3 · GO LIVE / END -->
+  <div class="grid2 block">
+    <div class="panel go">
+      <div class="p-h"><span class="dot"></span><h2>Go Live</h2></div>
+      <div class="p-body">
+        <div class="atem">
+          <svg viewBox="0 0 176 104" role="img" aria-label="The ATEM switcher. The ON AIR button on top is highlighted red; press it to start streaming. The OFF button sits just below it.">
+            <rect x="2" y="2" width="172" height="100" rx="10" fill="#23292e"/>
+            <rect x="10" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="22" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">1</text>
+            <rect x="38" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="50" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">2</text>
+            <rect x="66" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="78" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">3</text>
+            <rect x="94" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="106" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">4</text>
+            <rect x="128" y="70" width="38" height="24" rx="4" fill="#3d474e"/><text x="147" y="87" text-anchor="middle" font-size="10.5" font-weight="700" fill="#e7edf0" font-family="'Barlow Semi Condensed',sans-serif">CUT</text>
+            <rect x="112" y="14" width="54" height="22" rx="5" fill="#d92d20"/><text x="139" y="29" text-anchor="middle" font-size="11" font-weight="800" fill="#fff" font-family="'Barlow Semi Condensed',sans-serif">ON AIR</text>
+            <rect x="108" y="10" width="62" height="30" rx="7" fill="none" stroke="#ffd23c" stroke-width="2.4"/>
+            <rect x="112" y="42" width="54" height="20" rx="5" fill="#3d474e"/><text x="139" y="56" text-anchor="middle" font-size="10.5" font-weight="700" fill="#aeb8bf" font-family="'Barlow Semi Condensed',sans-serif">OFF</text>
+            <text x="82" y="27" text-anchor="middle" font-size="8" font-weight="800" fill="#c99700" font-family="'Barlow Semi Condensed',sans-serif">press ►</text>
+          </svg>
+        </div>
+        <ol class="mini">
+          <li>Make sure the <b>YouTube Studio Stream</b> page is up.</li>
+          <li>Press <kbd class="go">ON AIR</kbd> on the ATEM — it lights red. You're streaming.</li>
+          <li>Glance at YouTube Studio to confirm it shows <b>LIVE</b>.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="panel stop">
+      <div class="p-h"><span class="dot"></span><h2>End the stream</h2></div>
+      <div class="p-body">
+        <div class="atem">
+          <svg viewBox="0 0 176 104" role="img" aria-label="The ATEM switcher. The OFF button, just below ON AIR, is highlighted. When the service is over, press OFF to stop streaming.">
+            <rect x="2" y="2" width="172" height="100" rx="10" fill="#23292e"/>
+            <rect x="10" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="22" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">1</text>
+            <rect x="38" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="50" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">2</text>
+            <rect x="66" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="78" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">3</text>
+            <rect x="94" y="70" width="24" height="24" rx="4" fill="#e7edf0"/><text x="106" y="87" text-anchor="middle" font-size="12" font-weight="700" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">4</text>
+            <rect x="128" y="70" width="38" height="24" rx="4" fill="#3d474e"/><text x="147" y="87" text-anchor="middle" font-size="10.5" font-weight="700" fill="#e7edf0" font-family="'Barlow Semi Condensed',sans-serif">CUT</text>
+            <rect x="112" y="14" width="54" height="22" rx="5" fill="#571510"/><text x="139" y="29" text-anchor="middle" font-size="11" font-weight="700" fill="#c98a84" font-family="'Barlow Semi Condensed',sans-serif">ON AIR</text>
+            <rect x="112" y="42" width="54" height="20" rx="5" fill="#e7edf0"/><text x="139" y="56" text-anchor="middle" font-size="10.5" font-weight="800" fill="#23292e" font-family="'Barlow Semi Condensed',sans-serif">OFF</text>
+            <rect x="108" y="38" width="62" height="28" rx="7" fill="none" stroke="#ffd23c" stroke-width="2.4"/>
+            <text x="84" y="55" text-anchor="middle" font-size="8" font-weight="800" fill="#c99700" font-family="'Barlow Semi Condensed',sans-serif">press ►</text>
+          </svg>
+        </div>
+        <ol class="mini">
+          <li>When the service is over, press <kbd class="stop">OFF</kbd> on the ATEM — streaming stops.</li>
+          <li>Check YouTube Studio shows the stream has <b>ended</b> before you close anything.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADVANCED -->
+  <div class="adv-wrap">
+    <div class="adv-head"><span class="tag">Advanced</span><span>only when you need it — the silver <kbd class="adv">Override</kbd> button</span></div>
+    <div class="adv-grid">
+      <div><h3>Move the LIVE camera</h3>
+        <p><b>Hold <kbd class="adv">Override</kbd></b> while using the joystick to adjust the camera that's on air right now. Move <b>slowly</b> — everyone watching sees it.</p></div>
+      <div><h3>Save a preset</h3>
+        <p>Point the camera exactly where you want it, then <b>hold <kbd class="adv">Override</kbd> and tap <kbd>R1</kbd> or <kbd>R2</kbd></b> to store it. Tap that button any time to snap back.</p></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>Screen says <b>NO ATEM</b>? Check the cable to the switcher. Camera won't move? Make sure it's the one on <b>Preview</b>.</span>
+    <span><b>ChurchCam</b> · operator guide</span>
+  </footer>
+</div>
