@@ -27,6 +27,8 @@ static const char* servicesReason = "startup";
 // actually started in loop context (networkServicesLoop) -- calling WiFi.softAP()
 // from inside the event callback logs "Starting AP" but doesn't reliably broadcast.
 static volatile bool startApRequested = false;
+static uint32_t apGraceUntil = 0;               // set on first loop sighting of startApRequested
+static const uint32_t AP_GRACE_MS = 12000;      // wait this long for ETH/WiFi before the config AP
 // An ETH<->WiFi handoff changes which interface carries traffic, but existing
 // camera sockets stay bound to the old one. Set from the ETH event task and acted
 // on in loop context: close every camera link so it rebuilds on the new interface.
@@ -162,13 +164,18 @@ void networkServicesLoop() {
 
   // Start the config AP here (loop context) when the WiFi event task asked for it.
   if (startApRequested) {
-    startApRequested = false;
-    // Race guard: WiFi can exhaust its retries before ETH finishes coming up (~6s
-    // on WROVER). If Ethernet is up by now we have connectivity -- skip the AP.
-    if (ethUp()) {
-      logi("Config AP requested, but ETH is up now -- skipping AP");
-    } else {
-      logi("Starting config AP: %s", AP_SSID);
+    // Give ETH/WiFi a fair chance before the AP. WiFi can exhaust its retries, and
+    // the "no SSID" boot path requests the AP right away -- both before ETH finishes
+    // DHCP (~6s on WROVER). Start a one-shot grace window on first sighting; cancel
+    // the instant any real network is up; only fall back to the AP if the window
+    // elapses with still nothing. (ETH_GOT_IP also clears the request directly.)
+    if (apGraceUntil == 0) apGraceUntil = millis() + AP_GRACE_MS;
+    if (ethUp() || wifiUp() || hotspotUp()) {   // real network up, or the AP is already running
+      startApRequested = false; apGraceUntil = 0;
+      logi("Config AP not needed -- network (or AP) is up");
+    } else if ((int32_t)(millis() - apGraceUntil) >= 0) {
+      startApRequested = false; apGraceUntil = 0;
+      logi("No network after grace -- starting config AP: %s", AP_SSID);
       WiFi.mode(WIFI_AP);
       WiFi.softAP(AP_SSID);
       // Point every DNS lookup at us so the OS captive-portal check pops the page.
@@ -180,6 +187,7 @@ void networkServicesLoop() {
         logw("Captive DNS failed to start");
       }
     }
+    // else: still within the grace window -- keep waiting for ETH/WiFi.
   }
 
   if (!servicesRequested || servicesStarted) return;
@@ -212,6 +220,7 @@ void wifiEventCallback(WiFiEvent_t event) {
       logi("ETH_GOT_IP Hostname: %s IP: %s", ETH.getHostname(), ETH.localIP().toString().c_str());
       requestNetworkServices("ETH_GOT_IP");
       resetCamLinksRequested = true;   // traffic now prefers ETH -> rebuild cam sockets on it
+      startApRequested = false; apGraceUntil = 0;   // ETH is our network -- cancel any pending config AP
       break;
     case ARDUINO_EVENT_ETH_DISCONNECTED:
       logi("%d ETH_DISCONNECTED (WiFi stays up as the fallback route)", WiFi.getStatusBits());
@@ -252,7 +261,9 @@ void wifiEventCallback(WiFiEvent_t event) {
         } else {
           // Out of retries -- flag the config AP for loop context (can't start here).
           logi("WIFI_STA_DISCONNECT-3 - %d attempts failed, requesting config AP [%s]", wifiAttempts, AP_SSID);
-          startApRequested = true;
+          startApRequested = true;   // the loop owns the grace timer -- do NOT reset it here, or
+                                     // the WiFi radio's ~2.4s auto-retries restart it forever and
+                                     // the AP never actually comes up (stuck on Connecting).
         }
         break;
       }
@@ -359,11 +370,15 @@ void networkSetup() {
     ETH.setHostname(AP_SSID);
     delay(100);
 
-    // If no SSID defined, go into AccesswPoint mode, otherwise try to connect
+    // If no SSID defined, we USED to slam the hotspot up here. But on an Ethernet-
+    // primary unit ETH is the real network, so an always-on (open) AP is just
+    // confusing -- it's why the UI showed "hotspot on" with ETH connected. Defer to
+    // loop context, which starts the AP only if NO network (ETH or WiFi) comes up
+    // within the grace window; ETH_GOT_IP cancels the request outright.
     if( getSSID() == "" ) {
-      logi("Starting AP");
-      WiFi.softAP(AP_SSID);
-      WiFi.mode(WIFI_AP);
+      logi("No WiFi SSID -- deferring config AP (starts only if no network comes up)");
+      WiFi.mode(WIFI_STA);
+      startApRequested = true;
     } else {
       // Put WiFi into station mode and make it connect to saved network
       logi("Attempting connection to WiFi Network name (SSID): [%s]", getSSID().c_str());
