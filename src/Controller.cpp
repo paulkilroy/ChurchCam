@@ -140,12 +140,50 @@ int cameraStatus(int cameraNumber) {
                                : onvifStatus(cameraNumber);
 }
 
-void pollCameraStatus() {
+// True for a slot that has a real camera IP (skip 0.0.0.0 and the 255.x broadcast).
+static bool cameraConfigured(int i) {
+  uint8_t first = settings.cameraIP[i][0];
+  return first != 0 && first != 255;
+}
+
+static bool firstStatusPassDone = false;
+
+void pollCameraStatus(bool settledIdle) {
+  // (1) Hold until the network is up. Before the link has an IP every inquiry just
+  // reads NA, so polling now would only waste a camera's turn (the boot-timing bug:
+  // camera 1's turn landed ~0.5s before ETH_GOT_IP, read NA, and the old round-robin
+  // then starved it for a full ~8s lap -- it showed "down" while camera 2, polled
+  // just after the IP arrived, came up at once). Nothing to update yet, so return.
+  if (!networkUp()) return;
+
+  // (2) First pass: the instant the network is up, check EVERY configured camera
+  // back-to-back so the status display is correct right away (each inquiry is only
+  // tens of ms). This runs once and intentionally ignores the idle guard -- getting
+  // the display right wins for this one short burst, even if someone is already
+  // driving. Empty slots are skipped, so only real cameras cost any time.
+  if (!firstStatusPassDone) {
+    for (int i = 0; i < NUM_CAMERAS; i++) {
+      if (cameraConfigured(i)) camStatusCache[i] = cameraStatus(i);
+    }
+    firstStatusPassDone = true;
+    lastStatusPollAt = millis();
+    return;
+  }
+
+  // (3) Steady state: gentle. Only when the stick is at REST (so status I/O never
+  // interrupts joystick/camera control), one configured camera per interval. Advance
+  // to the next CONFIGURED camera so we don't spend five-sixths of the sweep on empty
+  // slots; with two cameras each is re-checked every ~2s, so a transient self-corrects
+  // fast. If nothing is configured the loop makes one lap and leaves camPollIdx put.
+  if (!settledIdle) return;
   uint32_t now = millis();
   if (now - lastStatusPollAt < STATUS_POLL_INTERVAL_MS) return;
   lastStatusPollAt = now;
   camStatusCache[camPollIdx] = cameraStatus(camPollIdx);
-  camPollIdx = (camPollIdx + 1) % NUM_CAMERAS;
+  for (int n = 0; n < NUM_CAMERAS; n++) {
+    camPollIdx = (camPollIdx + 1) % NUM_CAMERAS;
+    if (cameraConfigured(camPollIdx)) break;
+  }
 }
 
 int cachedCameraStatus(int cameraNumber) {
@@ -291,18 +329,20 @@ void cameraControlLoop() {
   // Refresh the camera-status cache from this (main-loop) task, so the async web
   // handler never touches a camera socket concurrently with camera driving.
   // cameraStatus() does BLOCKING socket I/O (hundreds of ms for a down camera) on
-  // this task, so it must never run mid-motion. "idle" alone isn't enough: sweeping
-  // the stick through centre while reversing direction is momentarily idle, and a
-  // poll firing there froze the joystick ("reverse off a hard stop and it stalls").
-  // Require the stick to be at REST for a short settle first -- quick reversals never
-  // trip it; a genuine pause does, invisibly (nothing is moving).
+  // this task. In STEADY STATE it must never run mid-motion: "idle" alone isn't
+  // enough -- sweeping the stick through centre while reversing direction is
+  // momentarily idle, and a poll firing there froze the joystick ("reverse off a
+  // hard stop and it stalls"). Require the stick to be at REST for a short settle
+  // first. (The one-time first pass ignores this -- see pollCameraStatus() -- so the
+  // status display is correct right after boot even if someone's already driving.)
   static uint32_t idleSince = 0;
   if ( idle ) {
     if ( idleSince == 0 ) idleSince = millis();
-    if ( millis() - idleSince > IDLE_SETTLE_MS ) pollCameraStatus();
   } else {
     idleSince = 0;
   }
+  bool settledIdle = idle && idleSince != 0 && ( millis() - idleSince > IDLE_SETTLE_MS );
+  pollCameraStatus( settledIdle );
 
   // the last part of this if statement inserts a bit of delay if needed before sending the next command
   // only once MAX_SEND ms -- 100ms max UNLESS YOU ARE TRYING TO STOP THE CAMMERA -- then do that ASAP

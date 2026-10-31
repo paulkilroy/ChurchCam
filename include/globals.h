@@ -218,7 +218,7 @@ void viscaSetup();
 void visca_recall_memory(int);
 void visca_set_memory(int);
 int cameraStatus(int);        // blocking probe -- MAIN-LOOP TASK ONLY (does socket I/O)
-void pollCameraStatus();      // main loop: refresh one camera's cached status per tick
+void pollCameraStatus(bool settledIdle);  // main loop: first pass checks all configured cameras at once; then one per rest-tick
 int cachedCameraStatus(int);  // web handler: read cached status (no I/O, race-free)
 int viscaStatus(int);    // VISCA power inquiry (Visca.cpp)
 int onvifStatus(int);    // ONVIF TCP reachability (Onvif.cpp)
