@@ -54,8 +54,11 @@ void discoverATEM(const char info[]) {
   // _switcher_ctrl._udp.local
   if (settings.switcherIP[0] == 0) {
     logi("%s ATEM IP not initialized - Atempting to auto discover atem", info);
-    //int n = MDNS.queryService("switcher_ctrl", "udp");
-    int n = MDNS.queryService("blackmagic", "tcp");
+    // Blackmagic renamed the mDNS service: current units (ATEM Mini Pro, confirmed
+    // on-air at the church) advertise _switcher_ctrl._udp (port 9910); older/other
+    // models used _blackmagic._tcp. Try the new name first, fall back to the old.
+    int n = MDNS.queryService("switcher_ctrl", "udp");
+    if (n == 0) n = MDNS.queryService("blackmagic", "tcp");
     if (n == 0) {
       logi("%s No ATEM services found", info);
     } else {

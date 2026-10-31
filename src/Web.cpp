@@ -264,22 +264,28 @@ static esp_err_t handleDiscoverCameras(PsychicRequest* request, PsychicResponse*
   return response->send(200, "application/json", inputs.c_str());
 }
 
-// Discover Blackmagic ATEM switchers on the LAN via mDNS (_blackmagic._tcp), the
-// same query discoverATEM() uses at boot. Returns a JSON array so the config page
-// can offer to fill in the ATEM IP. Read-only -- does not change settings.
+// Discover Blackmagic ATEM switchers on the LAN via mDNS. Blackmagic renamed the
+// service -- current units advertise _switcher_ctrl._udp, older/other ones used
+// _blackmagic._tcp -- so query BOTH and merge. Returns a JSON array so the config
+// page can offer to fill in the ATEM IP. Read-only -- does not change settings.
 static esp_err_t handleDiscoverATEM(PsychicRequest* request, PsychicResponse* response) {
   logi("web request for: %s\n", request->uri().c_str());
-  int n = MDNS.queryService("blackmagic", "tcp");
   String out = "[";
-  for ( int i = 0; i < n; ++i ) {
-    if ( i > 0 ) out += ',';
-    char e[128];
-    snprintf(e, sizeof e, "{\"name\":\"%s\",\"ip\":\"%s\",\"port\":%u}",
-             MDNS.hostname(i).c_str(), MDNS.address(i).toString().c_str(), MDNS.port(i));
-    out += e;
+  bool first = true;
+  const char* svcs[][2] = { { "switcher_ctrl", "udp" }, { "blackmagic", "tcp" } };
+  for ( auto& svc : svcs ) {
+    int n = MDNS.queryService(svc[0], svc[1]);
+    for ( int i = 0; i < n; ++i ) {
+      if ( !first ) out += ',';
+      first = false;
+      char e[160];
+      snprintf(e, sizeof e, "{\"name\":\"%s\",\"ip\":\"%s\",\"port\":%u}",
+               MDNS.hostname(i).c_str(), MDNS.address(i).toString().c_str(), MDNS.port(i));
+      out += e;
+    }
   }
   out += "]";
-  logi("ATEM discovery found %d switcher(s): %s", n, out.c_str());
+  logi("ATEM discovery: %s", out.c_str());
   return response->send(200, "application/json", out.c_str());
 }
 
