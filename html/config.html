@@ -180,8 +180,7 @@
         template.parentNode.appendChild(clone);
         // document.querySelectorAll("#" + clone.id + "  #camConfigToggle")[0].name = "camConfigToggle" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].name = "camConfigName" + i;
-        document.querySelectorAll("#" + clone.id + "  #camConfigType")[0].name = "camConfigType" + i;
-        document.querySelectorAll("#" + clone.id + "  #camConfigTransport")[0].name = "camConfigTransport" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigProto")[0].name = "camConfigProto" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].name = "camConfigIP" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].name = "camConfigPort" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigUser")[0].name = "camConfigUser" + i;
@@ -192,21 +191,19 @@
         // ?? What should the checkmark do? remove it from the status page?
         // or should I jsut get rid of the checkmark and simplify things (yes)
         document.querySelectorAll("#" + clone.id + "  #camConfigName")[0].id = "camConfigName" + i;
-        document.querySelectorAll("#" + clone.id + "  #camConfigType")[0].id = "camConfigType" + i;
-        document.querySelectorAll("#" + clone.id + "  #camConfigTransport")[0].id = "camConfigTransport" + i;
+        document.querySelectorAll("#" + clone.id + "  #camConfigProto")[0].id = "camConfigProto" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigIP")[0].id = "camConfigIP" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPort")[0].id = "camConfigPort" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigUser")[0].id = "camConfigUser" + i;
         document.querySelectorAll("#" + clone.id + "  #camConfigPass")[0].id = "camConfigPass" + i;
 
         document.getElementById("camConfigName" + i).innerHTML = ATEMCameras[i].name;
-        document.getElementById("camConfigType" + i).value = ATEMCameras[i].type;
-        document.getElementById("camConfigTransport" + i).value = ATEMCameras[i].transport;
+        document.getElementById("camConfigProto" + i).value = protoFromCam(ATEMCameras[i]);
         document.getElementById("camConfigIP" + i).value = ATEMCameras[i].ip;
         document.getElementById("camConfigPort" + i).value = ATEMCameras[i].port;
         document.getElementById("camConfigUser" + i).value = ATEMCameras[i].user || "";
         // Password is never echoed back; leave blank and only overwrite on save if typed.
-        onCamTypeChange(document.getElementById("camConfigType" + i));  // ONVIF->TCP + show/hide creds
+        onCamProtoChange(document.getElementById("camConfigProto" + i), true);  // show/hide creds, keep loaded port
       }
       template.remove();
     }
@@ -216,12 +213,10 @@
         let a = document.getElementById("dcAtemCam" + i).value;
         if (a != "") {
           //console.log("discovered camera: " + i + " selected atem cam: " + atemCamNum);
-          document.getElementById("camConfigType" + a).value = DiscoveredCameras[i].type;
-          document.getElementById("camConfigTransport" + a).value = DiscoveredCameras[i].transport;
-          onCamTypeChange(document.getElementById("camConfigType" + a));
+          document.getElementById("camConfigProto" + a).value = protoFromCam(DiscoveredCameras[i]);
           document.getElementById("camConfigIP" + a).value = DiscoveredCameras[i].ip;
           document.getElementById("camConfigPort" + a).value = DiscoveredCameras[i].port;
-          //document.getElementById("camConfigHeaders" + a).value = DiscoveredCameras[i].headers;
+          onCamProtoChange(document.getElementById("camConfigProto" + a), true);  // keep discovered port
         }
       }
     }
@@ -231,7 +226,7 @@
 
       for (let i = 0; i < DiscoveredCameras.length; i++) {
         const cam = DiscoveredCameras[i];
-        const typeStr = (cam.type == 1 ? "ONVIF" : "VISCA") + " " + (cam.transport == 1 ? "TCP" : "UDP");
+        const typeStr = PROTO_LABEL[protoFromCam(cam)];
         let ig = document.createElement("div");
         div.appendChild(ig);
         ig.className = "input-group mb-3";
@@ -462,31 +457,35 @@
 
     function toggleCam(e) {
       var camNum = e.id.replace(/^\D+/g, '');
-      document.getElementById("camConfigType" + camNum).disabled = !e.checked;
-      document.getElementById("camConfigTransport" + camNum).disabled = !e.checked;
+      document.getElementById("camConfigProto" + camNum).disabled = !e.checked;
       document.getElementById("camConfigIP" + camNum).disabled = !e.checked;
       document.getElementById("camConfigPort" + camNum).disabled = !e.checked;
     }
 
-    // ONVIF only speaks over TCP. When a camera's type is ONVIF, force its
-    // transport to TCP and block the UDP option; VISCA can use either. The
-    // transport select stays enabled so its value still posts on submit.
-    function onCamTypeChange(sel) {
-      var transport = document.getElementById(sel.id.replace("Type", "Transport"));
-      if (!transport) return;
-      var udpOpt = transport.querySelector('option[value="0"]');
-      var onvif = sel.value == "1";
-      if (onvif) {                     // ONVIF -> TCP only
-        transport.value = "1";
-        if (udpOpt) udpOpt.disabled = true;
-      } else {                         // VISCA -> UDP or TCP
-        if (udpOpt) udpOpt.disabled = false;
+    // Camera presets. 0 = Sony VISCA-over-IP (framed, UDP 52381); 1 = PTZOptics
+    // VISCA/TCP (raw, 5678); 2 = HuddleCam VISCA/UDP (raw, 1259); 3 = ONVIF (TCP).
+    // The backend stores type/transport/headers; the preset just drives the default
+    // port and the ONVIF credential fields. protoFromCam() derives the preset from a
+    // camera's stored type/transport/headers so the dropdown pre-selects correctly.
+    const PROTO_PORT  = { 0: 52381, 1: 5678, 2: 1259, 3: 80 };
+    const PROTO_LABEL = { 0: "Sony VISCA-IP", 1: "PTZOptics TCP", 2: "HuddleCam UDP", 3: "ONVIF" };
+    function protoFromCam(c) {
+      if (c.type == 1) return 3;                 // ONVIF
+      if (c.headers == 1) return 0;              // framed VISCA-over-IP
+      return c.transport == 1 ? 1 : 2;           // raw: TCP = PTZOptics, UDP = HuddleCam
+    }
+    function onCamProtoChange(sel, keepPort) {
+      var i = sel.id.replace(/^\D+/g, '');
+      var onvif = sel.value == "3";
+      if (!keepPort) {
+        var port = document.getElementById("camConfigPort" + i);
+        if (port) port.value = PROTO_PORT[sel.value] || "";
       }
       // ONVIF cameras need credentials; VISCA has no auth, so hide the fields.
-      var user = document.getElementById(sel.id.replace("Type", "User"));
-      var pass = document.getElementById(sel.id.replace("Type", "Pass"));
-      if (user) user.parentNode.style.display = onvif ? "" : "none";
-      if (pass) pass.parentNode.style.display = onvif ? "" : "none";
+      var user = document.getElementById("camConfigUser" + i);
+      var pass = document.getElementById("camConfigPass" + i);
+      if (user && user.parentNode) user.parentNode.style.display = onvif ? "" : "none";
+      if (pass && pass.parentNode) pass.parentNode.style.display = onvif ? "" : "none";
     }
 
     function getLogData() {
@@ -833,16 +832,12 @@
                   -->
                     <div id="camConfigName" class="input-group-text flex-grow-1 col-md-3 col-6">CAM1
                       [ATEM In1]</div>
-                    <div class="col-md-2 col-6 px-0">
-                      <select name="camConfigType" class="form-select" id="camConfigType" onchange="onCamTypeChange(this)">
-                        <option value="0">VISCA</option>
-                        <option value="1">ONVIF</option>
-                      </select>
-                    </div>
-                    <div class="col-md-2 col-6 px-0">
-                      <select name="camConfigTransport" class="form-select" id="camConfigTransport">
-                        <option value="0">UDP</option>
-                        <option value="1">TCP</option>
+                    <div class="col-md-4 col-6 px-0">
+                      <select name="camConfigProto" class="form-select" id="camConfigProto" onchange="onCamProtoChange(this)">
+                        <option value="0">Sony VISCA-over-IP (UDP 52381)</option>
+                        <option value="1">PTZOptics &middot; VISCA/TCP (5678)</option>
+                        <option value="2">HuddleCam &middot; VISCA/UDP (1259)</option>
+                        <option value="3">ONVIF</option>
                       </select>
                     </div>
                     <div class="col-md-3 col-6 px-0">
@@ -854,7 +849,7 @@
                       <input name="camConfigPort" type="text" class="form-control" id="camConfigPort" placeholder="52381" value=""
                         minlength="1" maxlength="5" size="5" pattern="^(\d{1,5})$">
                     </div>
-                    <!-- ONVIF-only credentials; shown/hidden by onCamTypeChange -->
+                    <!-- ONVIF-only credentials; shown/hidden by onCamProtoChange -->
                     <div class="col-md-3 col-6 px-0">
                       <input name="camConfigUser" type="text" class="form-control" id="camConfigUser" placeholder="onvif user"
                         value="" maxlength="23" autocomplete="off">

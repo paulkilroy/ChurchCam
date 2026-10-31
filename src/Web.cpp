@@ -307,20 +307,22 @@ static esp_err_t handleSave(PsychicRequest* request, PsychicResponse* response) 
   for ( int i = 0; i < NUM_CAMERAS; i++ ) {
     String n = String(i);
     if ( (p = request->getParam(("camConfigIP" + n).c_str())) )        settings.cameraIP[i].fromString(p->value());
-    if ( (p = request->getParam(("camConfigType" + n).c_str())) )      settings.cameraType[i]      = p->value().toInt(); // CAM_VISCA | CAM_ONVIF
-    if ( (p = request->getParam(("camConfigTransport" + n).c_str())) ) settings.cameraTransport[i] = p->value().toInt(); // CAM_UDP   | CAM_TCP
+    // One preset selects VISCA dialect + transport + framing:
+    //   0 Sony VISCA-over-IP (UDP, framed)   1 PTZOptics (TCP, raw)
+    //   2 HuddleCam (UDP, raw)               3 ONVIF (TCP)
+    if ( (p = request->getParam(("camConfigProto" + n).c_str())) ) {
+      switch ( p->value().toInt() ) {
+        case 1:  settings.cameraType[i]=CAM_VISCA; settings.cameraTransport[i]=CAM_TCP; settings.cameraHeaders[i]=0; break;
+        case 2:  settings.cameraType[i]=CAM_VISCA; settings.cameraTransport[i]=CAM_UDP; settings.cameraHeaders[i]=0; break;
+        case 3:  settings.cameraType[i]=CAM_ONVIF; settings.cameraTransport[i]=CAM_TCP; settings.cameraHeaders[i]=1; break;
+        default: settings.cameraType[i]=CAM_VISCA; settings.cameraTransport[i]=CAM_UDP; settings.cameraHeaders[i]=1; break; // Sony
+      }
+    }
     if ( (p = request->getParam(("camConfigPort" + n).c_str())) )      settings.cameraPort[i]      = p->value().toInt();
     if ( (p = request->getParam(("camConfigUser" + n).c_str())) )      strlcpy(settings.cameraUser[i], p->value().c_str(), sizeof(settings.cameraUser[i]));
     // Password is only echoed as blank, so an empty field means "keep existing".
     if ( (p = request->getParam(("camConfigPass" + n).c_str())) && p->value().length() )
                                                                        strlcpy(settings.cameraPass[i], p->value().c_str(), sizeof(settings.cameraPass[i]));
-  }
-
-  // VISCA-IP header framing: VISCA over UDP is framed, VISCA over TCP is raw.
-  // (ONVIF ignores it.) Derived, not separately configured.
-  for ( int c = 0; c <= NUM_CAMERAS; c++ ) {
-    settings.cameraHeaders[c] =
-      ( settings.cameraType[c] == CAM_VISCA && settings.cameraTransport[c] == CAM_TCP ) ? 0 : 1;
   }
 
   if ( !InSimulator ) {
