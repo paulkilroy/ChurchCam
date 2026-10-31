@@ -253,15 +253,44 @@ static esp_err_t handleDiscoverCameras(PsychicRequest* request, PsychicResponse*
   for ( int i = 0; i < numDiscoveredCameras; ++i ) {
     DiscoveredCamera &c = discoveredCameras[i];
     if ( i > 0 ) inputs += ',';
-    // VISCA-TCP is raw (no framing); everything else is framed (matches handleSave()).
-    int headers = ( c.type == CAM_VISCA && c.transport == CAM_TCP ) ? 0 : 1;
     char input[170];
-    sprintf(input, fmt, i, c.name, c.ip.toString().c_str(), c.port, c.type, c.transport, headers);
+    sprintf(input, fmt, i, c.name, c.ip.toString().c_str(), c.port, c.type, c.transport, c.headers);
     inputs += input;
   }
   inputs += "]";
   logi("Discovered %d camera(s): %s", numDiscoveredCameras, inputs.c_str());
   return response->send(200, "application/json", inputs.c_str());
+}
+
+// Full-subnet VISCA scan (CameraScan.cpp). /scanSubnet kicks it off (it then runs in
+// the main loop, one host per tick); the page polls /scanProgress for the progress
+// bar + the growing found list, which reuses the DiscoveredCameras shape so the
+// existing "assign to camera" UI works unchanged.
+static esp_err_t handleScanSubnet(PsychicRequest* request, PsychicResponse* response) {
+  logi("web request for: %s\n", request->uri().c_str());
+  scanStart();
+  char out[64];
+  snprintf(out, sizeof out, "{\"ok\":true,\"total\":%u}", (unsigned)g_scanTotal);
+  return response->send(200, "application/json", out);
+}
+
+static esp_err_t handleScanProgress(PsychicRequest* request, PsychicResponse* response) {
+  String out = "{\"running\":";
+  out += (g_scanRunning ? "true" : "false");
+  out += ",\"scanned\":"; out += String((unsigned)g_scanDone);
+  out += ",\"total\":";   out += String((unsigned)g_scanTotal);
+  out += ",\"found\":[";
+  for ( int i = 0; i < numDiscoveredCameras; ++i ) {
+    DiscoveredCamera &c = discoveredCameras[i];
+    if ( i > 0 ) out += ',';
+    char e[180];
+    snprintf(e, sizeof e,
+      "{\"id\":\"%d\",\"name\":\"%s\",\"ip\":\"%s\",\"port\":\"%u\",\"type\":\"%d\",\"transport\":\"%d\",\"headers\":\"%d\"}",
+      i, c.name, c.ip.toString().c_str(), c.port, c.type, c.transport, c.headers);
+    out += e;
+  }
+  out += "]}";
+  return response->send(200, "application/json", out.c_str());
 }
 
 // Discover Blackmagic ATEM switchers on the LAN via mDNS. Blackmagic renamed the
@@ -436,6 +465,8 @@ void webSetup() {
 
   server.on("/discoverCameras", HTTP_GET, handleDiscoverCameras);
   server.on("/discoverATEM", HTTP_GET, handleDiscoverATEM);
+  server.on("/scanSubnet", HTTP_GET, handleScanSubnet);
+  server.on("/scanProgress", HTTP_GET, handleScanProgress);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/restart", HTTP_ANY, handleRestartAndWait);
   server.on("/logData", HTTP_GET, handleLogData);

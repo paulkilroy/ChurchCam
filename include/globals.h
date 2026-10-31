@@ -146,6 +146,7 @@ struct DiscoveredCamera {
   uint16_t  port;
   uint8_t   type;       // CAM_VISCA | CAM_ONVIF
   uint8_t   transport;  // CAM_UDP   | CAM_TCP
+  uint8_t   headers;    // 1 = framed VISCA-over-IP, 0 = raw
   char      name[24];
 };
 #define MAX_DISCOVERED 16
@@ -219,7 +220,17 @@ void webLoop();
 extern DiscoveredCamera discoveredCameras[MAX_DISCOVERED];
 extern int numDiscoveredCameras;
 void resetDiscovered();
-bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport, const char *name);
+bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport, uint8_t headers, const char *name);
+
+// Cooperative subnet scan for VISCA cameras (CameraScan.cpp). scanStart() figures
+// the host range from the active interface's subnet; scanTick() probes one host per
+// call (run it from the main loop); results land in discoveredCameras[]. The three
+// volatiles drive the config page's progress bar.
+void scanStart();
+void scanTick();
+extern volatile bool     g_scanRunning;
+extern volatile uint16_t g_scanDone;
+extern volatile uint16_t g_scanTotal;
 int discoverCameras();        // VISCA broadcast probe (appends to discoveredCameras)
 int discoverOnvifCameras();   // ONVIF WS-Discovery (appends to discoveredCameras)
 boolean overridePreview();

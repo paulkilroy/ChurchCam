@@ -359,6 +359,42 @@
       btn.innerHTML = "Discover Cameras";
     }
 
+    // Full subnet scan: the device sweeps every host in its subnet and probes the
+    // three VISCA dialects (TCP 5678, raw UDP 1259, framed UDP 52381). It runs on the
+    // controller; we start it, then poll /scanProgress for the progress bar and the
+    // live-growing found list (same shape as discovery, so assign works unchanged).
+    async function subnetScan(btn) {
+      btn.disabled = true;
+      const orig = btn.innerHTML;
+      btn.innerHTML = "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Scanning…";
+      const wrap = document.getElementById("scanBarWrap");
+      const bar = document.getElementById("scanBar");
+      wrap.style.display = "";
+      bar.classList.add("progress-bar-animated");
+      bar.style.width = "0%"; bar.innerHTML = "0%";
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('discoverModal')).show();
+      DiscoveredCameras = []; drawDiscoveredCameras();
+      try {
+        await fetch('/scanSubnet');
+        while (true) {
+          await new Promise(r => setTimeout(r, 500));
+          const p = await (await fetch('/scanProgress')).json();
+          const pct = p.total ? Math.round(100 * p.scanned / p.total) : 0;
+          bar.style.width = pct + "%";
+          bar.innerHTML = pct + "%  ·  " + p.found.length + " found";
+          DiscoveredCameras = p.found;
+          drawDiscoveredCameras();
+          if (!p.running) break;
+        }
+        bar.classList.remove("progress-bar-animated");
+      } catch (e) {
+        console.log(e);
+        bar.innerHTML = "scan failed";
+      }
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+
     // Scan the LAN for a Blackmagic ATEM (mDNS) and fill in its IP.
     async function scanAtem(btn) {
       const orig = "Scan for ATEMs";
@@ -780,8 +816,10 @@
                 </div>
 
                 <!-- Button trigger modal -->
-                <button id="discoverCamerasButton" type="button" class="btn btn-success py-2 my-2 col-12"
+                <button id="discoverCamerasButton" type="button" class="btn btn-success py-2 mt-2 col-12"
                   onclick="discoverCameras(this)">Scan Cameras</button>
+                <button id="subnetScanButton" type="button" class="btn btn-outline-success py-2 mb-2 col-12"
+                  onclick="subnetScan(this)">Full subnet scan</button>
                 <!-- Modal -->
                 <div class="modal fade" id="discoverModal" tabindex="-1">
                   <div class="modal-dialog">
@@ -791,6 +829,10 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                       </div>
                       <div class="modal-body">
+                        <div id="scanBarWrap" class="progress mb-3" style="display:none;height:22px">
+                          <div id="scanBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                            role="progressbar" style="width:0%">0%</div>
+                        </div>
                         <div id="discoveredCameras">Discovering Cameras</div>
                       </div>
                       <div class="modal-footer">

@@ -520,7 +520,7 @@ int discoverOnvifCameras() {
     parseXAddr(buf, ip, port);
     char name[24];
     parseScopeName(buf, name, sizeof name);
-    if (addDiscovered(ip, port, CAM_ONVIF, CAM_TCP, name)) {
+    if (addDiscovered(ip, port, CAM_ONVIF, CAM_TCP, 1, name)) {   // ONVIF ignores VISCA framing
       logi("ONVIF camera: %s:%u \"%s\"", ip.toString().c_str(), port, name);
       found++;
     }

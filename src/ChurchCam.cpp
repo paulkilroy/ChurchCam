@@ -156,6 +156,10 @@ void loop() {
     atemSwitcher.runLoop();
   }
   
+  // A subnet scan takes over the loop (its probes block ~a few hundred ms each);
+  // keep the web alive so the config page can poll /scanProgress for the bar.
+  if (g_scanRunning) { scanTick(); webLoop(); return; }
+
   cameraControlLoop();
 
   webLoop();

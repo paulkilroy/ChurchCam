@@ -70,7 +70,7 @@ void resetDiscovered() {
 
 // Append a camera, de-duplicated by ip+port (so re-probes and multi-response
 // cameras don't create duplicates). Returns true if a new entry was added.
-bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport, const char *name) {
+bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport, uint8_t headers, const char *name) {
   for (int i = 0; i < numDiscoveredCameras; i++) {
     if (discoveredCameras[i].ip == ip && discoveredCameras[i].port == port) return false;
   }
@@ -80,6 +80,7 @@ bool addDiscovered(IPAddress ip, uint16_t port, uint8_t type, uint8_t transport,
   c.port = port;
   c.type = type;
   c.transport = transport;
+  c.headers = headers;
   strlcpy(c.name, name, sizeof(c.name));
   return true;
 }
@@ -392,7 +393,7 @@ int discoverCameras() {
     if (port == 0) port = VISCA_PORT;
     char name[24];
     parseViscaName(response, len, name, sizeof(name));
-    if (addDiscovered(ip, port, CAM_VISCA, CAM_UDP, name)) {
+    if (addDiscovered(ip, port, CAM_VISCA, CAM_UDP, 1, name)) {   // broadcast reply = framed VISCA-over-IP
       logi("VISCA camera: %s:%u \"%s\"", ip.toString().c_str(), port, name);
       found++;
     }
