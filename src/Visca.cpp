@@ -161,6 +161,11 @@ void visca_send(String command, byte packet[], int size, int cameraNumber, boole
     VISCA_ERROR("E97");
   }
 
+  // Before an inquiry (we're about to read its reply), drop any stale replies left
+  // queued by earlier fire-and-forget drive/recall commands -- otherwise we read one
+  // of those instead of this inquiry's reply and misreport the camera as DOWN.
+  if (waitForAck) camFlush(cameraNumber);
+
   if (NETWORK_SUCCESS != camSend(cameraNumber, &packet[startPos], sendSize)) {
     VISCA_ERROR("E96");
   }

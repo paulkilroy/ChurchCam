@@ -320,3 +320,20 @@ int camRecv( int cameraNumber, byte packet[], size_t cap ) {
 #endif
   return len;   // byte count on success (>0); NETWORK_ERROR/TIMEOUT are 0/-1
 }
+
+// Drain and discard anything already queued on the camera socket, without blocking.
+// VISCA drive and recall commands are fire-and-forget -- we never read the camera's
+// ACK/Completion replies -- so those replies pile up in the RX buffer. Left there,
+// the next inquiry (PWR_INQ for status) reads a STALE reply instead of its own and
+// misreads a perfectly good (actively driving) camera as DOWN. Call this right
+// before an inquiry so the reply we then read is the fresh one. Affects UDP and TCP
+// alike: UDP queues whole datagrams, TCP queues bytes.
+void camFlush( int cameraNumber ) {
+  CameraLink &c = cameras[cameraNumber];
+  if ( c.fd < 0 ) return;
+  byte scratch[64];
+  for ( int i = 0; i < 256; i++ ) {            // bounded; stops as soon as it's empty
+    int n = lwip_recv( c.fd, scratch, sizeof scratch, MSG_DONTWAIT );
+    if ( n <= 0 ) break;                        // -1 = EAGAIN (empty); 0 = closed
+  }
+}

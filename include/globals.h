@@ -230,6 +230,7 @@ void networkServicesLoop();
 int camConnect( int cameraNumber );
 int camSend( int cameraNumber, byte packet[], int size );
 int camRecv( int cameraNumber, byte packet[], size_t cap );
+void camFlush( int cameraNumber );   // drop stale queued replies before an inquiry reads its own
 void camClose( int cameraNumber );
 void camResetAllLinks();   // close every camera socket so they rebuild on the current interface
 IPAddress camRemoteIP( int cameraNumber );
