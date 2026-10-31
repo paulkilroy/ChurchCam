@@ -341,15 +341,20 @@ int viscaStatus(int cameraNumber) {
   if (!settings.cameraHeaders[cameraNumber]) {
     pwrByte -= VISCA_HEADER_SIZE;
   }
-  visca_send("PWR_INQ", visca_pwr_inq_bytes, sizeof(visca_pwr_inq_bytes), cameraNumber, true, true, response);
 
-  if (response[pwrByte] == 0x02) {
-    return CAMERA_UP;
-  } else if (response[pwrByte] == 0x03) {
-    return CAMERA_OFF; // Do something different? camera is there but on standy
-  } else {
-    return CAMERA_DOWN; // camera didn't response
+  // The first inquiry to a camera after boot (or a long idle) is routinely lost:
+  // it's the packet that triggers ARP resolution, and lwIP drops it rather than
+  // queue it, so no reply ever comes and a single try misreads a healthy camera as
+  // DOWN until the next ~8s sweep. The first send resolves ARP (UDP recv timeouts
+  // don't tear the socket down), so a second attempt gets through. Try twice before
+  // calling it down; a genuinely dead camera just fails both, fast.
+  for (int attempt = 0; attempt < 2; attempt++) {
+    // visca_send() zeroes response before each call, so a timeout leaves pwrByte 0.
+    visca_send("PWR_INQ", visca_pwr_inq_bytes, sizeof(visca_pwr_inq_bytes), cameraNumber, true, true, response);
+    if (response[pwrByte] == 0x02) return CAMERA_UP;
+    if (response[pwrByte] == 0x03) return CAMERA_OFF;  // camera present but in standby
   }
+  return CAMERA_DOWN;  // no response after a retry -- treat as down
 }
 
 // Pull a "NAME:xxxx" value out of a VISCA discovery reply into out[cap].
