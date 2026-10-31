@@ -145,7 +145,8 @@ void scanStart() {
   if (total > SCAN_HOST_CAP) total = SCAN_HOST_CAP;
   scanCur  = first;
   scanSelf = ipv;
-  resetDiscovered();
+  // NOTE: the caller resets the discovered list before seeding it with broadcast
+  // results, so scanStart() must NOT clear it here -- it only appends sweep finds.
   g_scanTotal   = (uint16_t)total;
   g_scanDone    = 0;
   g_scanRunning = (total > 0);

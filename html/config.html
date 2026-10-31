@@ -359,16 +359,19 @@
       btn.innerHTML = "Discover Cameras";
     }
 
-    // Full subnet scan: the device sweeps every host in its subnet and probes the
-    // three VISCA dialects (TCP 5678, raw UDP 1259, framed UDP 52381). It runs on the
-    // controller; we start it, then poll /scanProgress for the progress bar and the
-    // live-growing found list (same shape as discovery, so assign works unchanged).
+    // One scan to find everything: the device first runs the quick broadcast/ONVIF
+    // discovery, then sweeps every host in its subnet probing the three VISCA dialects
+    // (TCP 5678, raw UDP 1259, framed UDP 52381). We start it, then poll /scanProgress
+    // for the progress bar and the live-growing found list (same shape as discovery,
+    // so assign works unchanged). A full /24 can take a minute -- run once per setup.
     async function subnetScan(btn) {
       btn.disabled = true;
       const orig = btn.innerHTML;
       btn.innerHTML = "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Scanning…";
+      const title = document.getElementById("exampleModalLabel");
       const wrap = document.getElementById("scanBarWrap");
       const bar = document.getElementById("scanBar");
+      title.innerText = "Scanning for cameras…";
       wrap.style.display = "";
       bar.classList.add("progress-bar-animated");
       bar.style.width = "0%"; bar.innerHTML = "0%";
@@ -387,9 +390,12 @@
           if (!p.running) break;
         }
         bar.classList.remove("progress-bar-animated");
+        bar.innerHTML = "Done · " + DiscoveredCameras.length + " found";
+        title.innerText = "Assign discovered cameras";
       } catch (e) {
         console.log(e);
         bar.innerHTML = "scan failed";
+        title.innerText = "Assign discovered cameras";
       }
       btn.disabled = false;
       btn.innerHTML = orig;
@@ -816,10 +822,10 @@
                 </div>
 
                 <!-- Button trigger modal -->
-                <button id="discoverCamerasButton" type="button" class="btn btn-success py-2 mt-2 col-12"
-                  onclick="discoverCameras(this)">Scan Cameras</button>
-                <button id="subnetScanButton" type="button" class="btn btn-outline-success py-2 mb-2 col-12"
-                  onclick="subnetScan(this)">Full subnet scan</button>
+                <button id="scanCamerasButton" type="button" class="btn btn-success py-2 mt-2 col-12"
+                  onclick="subnetScan(this)">Scan for cameras</button>
+                <div class="form-text mb-2">Searches the whole network for VISCA and ONVIF cameras.
+                  This can take a minute or two &mdash; you normally only run it once when setting up.</div>
                 <!-- Modal -->
                 <div class="modal fade" id="discoverModal" tabindex="-1">
                   <div class="modal-dialog">

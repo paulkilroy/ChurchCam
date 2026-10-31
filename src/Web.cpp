@@ -65,6 +65,9 @@ String processor(const String& var) {
 
     status = WiFi.STA.started() ? "down" : "off";
     if ( WiFi.STA.hasIP() ) status = "up";
+    // When Ethernet is the live uplink, a not-connected WiFi isn't a fault -- show it
+    // as idle/off (neutral) rather than a red "down".
+    if ( status == "down" && ETH.hasIP() ) status = "off";
     sprintf(network, nfmt, "WiFi", status.c_str(),
       status == "up" ? WiFi.localIP().toString().c_str() : "-",
       getSSID().c_str(),
@@ -267,13 +270,18 @@ static esp_err_t handleDiscoverCameras(PsychicRequest* request, PsychicResponse*
   return response->send(200, "application/json", inputs.c_str());
 }
 
-// Full-subnet VISCA scan (CameraScan.cpp). /scanSubnet kicks it off (it then runs in
-// the main loop, one host per tick); the page polls /scanProgress for the progress
-// bar + the growing found list, which reuses the DiscoveredCameras shape so the
-// existing "assign to camera" UI works unchanged.
+// One scan to find everything. The quick broadcast/multicast probes run first and
+// synchronously (VISCA-over-IP UDP broadcast + ONVIF WS-Discovery), seeding the list;
+// then the full subnet sweep (CameraScan.cpp) starts and runs in the main loop, one
+// host per tick, appending the raw/TCP cameras that broadcast can't reach. The page
+// polls /scanProgress for the bar + the growing found list (reused assign UI). A
+// full setup runs this once, so the ~minute it can take on a /24 is acceptable.
 static esp_err_t handleScanSubnet(PsychicRequest* request, PsychicResponse* response) {
   logi("web request for: %s\n", request->uri().c_str());
-  scanStart();
+  resetDiscovered();
+  discoverCameras();        // VISCA-over-IP UDP broadcast (fast)
+  discoverOnvifCameras();   // ONVIF WS-Discovery (fast)
+  scanStart();              // full subnet sweep -- appends to the seeded list, de-duped
   char out[64];
   snprintf(out, sizeof out, "{\"ok\":true,\"total\":%u}", (unsigned)g_scanTotal);
   return response->send(200, "application/json", out);
