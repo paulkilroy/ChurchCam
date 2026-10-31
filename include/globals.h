@@ -174,6 +174,13 @@ void notePresetHeld(int num, bool held);     // latch a held recall button for a
 extern volatile bool g_otaActive;            // firmware update in progress (display shows the OTA screen)
 extern volatile uint32_t g_otaBytes;         // bytes written so far during OTA
 extern volatile uint32_t g_otaLastChunk;     // millis() of the last received OTA chunk (stuck detection)
+extern volatile bool g_otaUrlMode;           // true during a GitHub pull-OTA: httpUpdate owns Update, so webLoop's stall-abort must stand down
+
+// Firmware version, stamped at build time by scripts/gen_version.py (git describe).
+// Fallback keeps non-PlatformIO builds and editors compiling.
+#ifndef FW_VERSION
+#define FW_VERSION "dev"
+#endif
 extern volatile bool g_calibrateCenter;      // set by the web task; the control loop captures the joystick's resting center into settings.*Mid
 struct LogItem getLogItem(uint8_t i);
 void cameraControlLoop();

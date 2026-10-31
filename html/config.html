@@ -939,6 +939,10 @@
                     <span class="input-group-text col-3">Hardware:</span>
                     <span class="input-group-text bg-white col-9">%BOARD_NAME%</span>
                   </div>
+                  <div class="input-group mb-3">
+                    <span class="input-group-text col-3">Firmware:</span>
+                    <span class="input-group-text bg-white col-9" id="fwVersion">%FW_VERSION%</span>
+                  </div>
                   <!-- Joystick Info -->
                   <div class="row">
                     <div class="col-3">Pan:</div>
@@ -993,9 +997,17 @@
                   All Data</button>
               </div>
               <hr class="my-4">
+              <!-- Update from GitHub: check the repo's latest release, then pull+flash it. -->
+              <div class="row">
+                <button id="githubCheckButton" type="button" class="btn btn-primary btn-lg btn-block"
+                  onclick="checkGithubUpdate(this)">Check GitHub for updates</button>
+              </div>
+              <div id="githubUpdateResult" class="mt-2"></div>
+              <hr class="my-4">
               <!-- Best post on this -->
               <!-- https://tympanus.net/codrops/2015/09/15/styling-customizing-file-inputs-smart-way/ -->
               <!-- https://www.quirksmode.org/dom/inputfile.html -->
+              <div class="text-muted small mb-2">Or flash a local .bin file:</div>
               <form method='POST' action='#' enctype='multipart/form-data' id='upload_form'>
                 <div class="input-group">
                   <label id="fileButton" class="btn btn-success btn-lg btn-block" for="update">Choose .bin file:</label>
@@ -1032,6 +1044,65 @@
     if (smsg) {
       document.getElementById("smsgBox").innerHTML = smsg;
       document.getElementById("smsgBox").style.display = 'block';
+    }
+
+    // Ask the device to query GitHub for its repo's latest release and compare it
+    // to the running build. The device does the fetch server-side (the browser
+    // can't reach api.github.com cross-origin), so this is one call to /checkUpdate.
+    async function checkGithubUpdate(btn) {
+      btn.disabled = true;
+      const orig = btn.innerHTML;
+      btn.innerHTML = "<span class='spinner-border spinner-border-sm mx-2' role='status' aria-hidden='true'></span>Checking…";
+      const box = document.getElementById("githubUpdateResult");
+      try {
+        const r = await fetch('/checkUpdate');
+        const p = await r.json();
+        if (p.current) document.getElementById("fwVersion").innerText = p.current;
+        if (!p.canInstall) {
+          box.innerHTML = "<div class='alert alert-warning mb-0'>Couldn't check GitHub: " +
+            (p.error || "no firmware asset found") + "</div>";
+        } else if (p.updateAvailable) {
+          box.innerHTML =
+            "<div class='alert alert-success'>Update available: <b>" + p.latest +
+            "</b> (you're on " + p.current + ").</div>" +
+            "<button type='button' class='btn btn-success btn-lg btn-block' " +
+            "onclick=\"installGithubUpdate(this,'" + p.latest + "')\">Install " + p.latest + "</button>";
+        } else {
+          box.innerHTML =
+            "<div class='alert alert-secondary'>Latest release is <b>" + p.latest +
+            "</b>; your build (" + p.current + ") is current or newer.</div>" +
+            "<button type='button' class='btn btn-outline-secondary btn-block' " +
+            "onclick=\"installGithubUpdate(this,'" + p.latest + "')\">Reinstall " + p.latest + "</button>";
+        }
+      } catch (e) {
+        console.log(e);
+        box.innerHTML = "<div class='alert alert-warning mb-0'>Update check failed (no network?).</div>";
+      }
+      btn.disabled = false;
+      btn.innerHTML = orig;
+    }
+
+    // Tell the device to pull that release and flash it. The device reboots itself
+    // when done, so we just wait for it to answer /ping again, then reload.
+    async function installGithubUpdate(btn, tag) {
+      if (!confirm("Download and install " + tag + "? The controller will reboot and briefly go offline.")) return;
+      btn.disabled = true;
+      const box = document.getElementById("githubUpdateResult");
+      try {
+        const r = await fetch('/updateFromGithub', { method: 'POST' });
+        if (!r.ok) { box.innerHTML = "<div class='alert alert-danger mb-0'>Couldn't start update: " + await r.text() + "</div>"; btn.disabled = false; return; }
+      } catch (e) {
+        box.innerHTML = "<div class='alert alert-danger mb-0'>Couldn't start update.</div>"; btn.disabled = false; return;
+      }
+      box.innerHTML = "<div class='alert alert-info mb-0'>Downloading &amp; flashing from GitHub — the controller's screen shows progress and it will reboot on its own. This page reconnects when it's back (~30–60s). <b>Do not power off.</b></div>";
+      // Give the device time to reboot before we start polling, then wait for it.
+      setTimeout(waitForReboot, 15000);
+    }
+
+    function waitForReboot() {
+      fetch('/ping', { cache: 'no-store' })
+        .then(r => { if (r.ok) location.reload(); else setTimeout(waitForReboot, 3000); })
+        .catch(() => setTimeout(waitForReboot, 3000));
     }
 
     /* Native XHR firmware upload with a progress bar. fetch() has no

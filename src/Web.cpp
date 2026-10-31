@@ -5,6 +5,9 @@
 #include <EEPROM.h>
 #include <Update.h>
 #include <ESPmDNS.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoJson.h>
 
 #include "globals.h"
 
@@ -39,6 +42,7 @@ bool Restart = false;
 volatile bool g_otaActive = false;      // set while an OTA upload is streaming (display OTA screen)
 volatile uint32_t g_otaBytes = 0;
 volatile uint32_t g_otaLastChunk = 0;   // millis() of the last chunk, for stuck-upload detection
+volatile bool g_otaUrlMode = false;     // true during a GitHub pull-OTA (stall-abort stands down)
 volatile bool g_calibrateCenter = false;   // request: capture joystick rest center (done in the control loop)
 
 String processor(const String& var) {
@@ -144,6 +148,7 @@ String processor(const String& var) {
   else if ( var == "TILT_MID" ) return String(settings.tiltMid);
   else if ( var == "ZOOM_MID" ) return String(settings.zoomMid);
   else if ( var == "BOARD_NAME" ) return Pinouts[HWRev].name;
+  else if ( var == "FW_VERSION" ) return String(FW_VERSION);
   else if ( var == "RESTART_MSG" ) return RestartMsg;
   // Wrong-board banner: empty on a healthy WROVER-E, a loud red alert otherwise.
   else if ( var == "BOARD_ALERT" ) {
@@ -443,6 +448,176 @@ static esp_err_t otaUploadChunk(PsychicRequest* request, const String& filename,
 }
 
 // ---------------------------------------------------------------------------
+// GitHub OTA: pull the latest published release over HTTPS
+// ---------------------------------------------------------------------------
+// Structured after the EllaFi project: the GitHub Release is the source of truth,
+// queried live via the API (server-side, so the browser's CORS block doesn't
+// apply), and a background FreeRTOS task streams the firmware asset straight into
+// the OTA partition. ChurchCam differs from EllaFi only in versioning -- it has no
+// build-number scheme, so the release *tag* (git describe, e.g. v1.2.0) is the
+// version and the asset is plain firmware.bin, compared against FW_VERSION as
+// semver. NOTE: setInsecure() skips TLS cert validation (a MITM could serve a
+// forged image) -- acceptable for a LAN admin action pulling from a public repo;
+// a signed image would be the real fix. GitHub's API needs a User-Agent or 403s.
+static const char* GITHUB_RELEASES_API =
+  "https://api.github.com/repos/paulkilroy/ChurchCam/releases/latest";
+
+struct LatestRelease { String tag; String url; String err; };
+
+static LatestRelease fetchLatestRelease() {
+  LatestRelease r;
+  WiFiClientSecure wc; wc.setInsecure(); wc.setTimeout(12000);
+  HTTPClient http; http.setTimeout(12000);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  if (!http.begin(wc, GITHUB_RELEASES_API)) { r.err = "connect failed"; return r; }
+  http.addHeader("User-Agent", "ChurchCam-OTA");          // required by the GitHub API
+  http.addHeader("Accept", "application/vnd.github+json");
+  int code = http.GET();
+  if (code != 200) {
+    r.err = (code == 404) ? "no releases published yet" : ("HTTP " + String(code));
+    http.end();
+    return r;
+  }
+  String body = http.getString();
+  http.end();
+  // Filter the (large) release JSON down to just what we need before parsing.
+  JsonDocument filter;
+  filter["tag_name"] = true;
+  filter["assets"][0]["name"] = true;
+  filter["assets"][0]["browser_download_url"] = true;
+  JsonDocument doc;
+  if (deserializeJson(doc, body, DeserializationOption::Filter(filter))) { r.err = "parse error"; return r; }
+  r.tag = doc["tag_name"].as<String>();
+  for (JsonObject a : doc["assets"].as<JsonArray>()) {
+    String name = a["name"].as<String>();
+    if (name.endsWith(".bin")) {
+      r.url = a["browser_download_url"].as<String>();
+      if (name == "firmware.bin") break;   // prefer the plain name; otherwise first .bin wins
+    }
+  }
+  if (r.url.isEmpty() && r.err.isEmpty()) r.err = "no firmware.bin asset in latest release";
+  return r;
+}
+
+// Parse a git-describe/semver tag ("v1.2.3", "1.2", "v2.0.0-3-gabc1234") into a
+// comparable {major,minor,patch}. Returns false if it doesn't begin with a version
+// number -- e.g. an untagged dev build, which is just a short commit hash.
+static bool parseSemver(const String& s, long v[3]) {
+  v[0] = v[1] = v[2] = 0;
+  int i = 0;
+  if (i < (int)s.length() && (s[i] == 'v' || s[i] == 'V')) i++;
+  if (i >= (int)s.length() || !isdigit((unsigned char)s[i])) return false;
+  int part = 0;
+  for (; i < (int)s.length() && part < 3; i++) {
+    char c = s[i];
+    if (isdigit((unsigned char)c)) v[part] = v[part] * 10 + (c - '0');
+    else if (c == '.') part++;
+    else break;   // stop at the '-' git-describe suffix or anything non-numeric
+  }
+  return true;
+}
+
+// latest strictly newer than current? Only true when BOTH parse as real versions,
+// so an untagged dev build never falsely reports "update available".
+static bool isNewerVersion(const String& latest, const String& current) {
+  long a[3], b[3];
+  if (!parseSemver(latest, a) || !parseSemver(current, b)) return false;
+  for (int i = 0; i < 3; i++) if (a[i] != b[i]) return a[i] > b[i];
+  return false;
+}
+
+// Stream firmware.bin from a URL straight into the OTA partition. Runs on the OTA
+// task (below); drives g_otaBytes/g_otaLastChunk so the display's "updating" screen
+// tracks progress and webLoop's stall-abort stays satisfied.
+static bool flashFirmwareFromUrl(const String& url, size_t& written, String& err) {
+  WiFiClientSecure wc; wc.setInsecure(); wc.setTimeout(20000);
+  HTTPClient http; http.setTimeout(60000);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);   // GitHub assets 302 to objects.githubusercontent.com
+  if (!http.begin(wc, url)) { err = "connect failed"; return false; }
+  int code = http.GET();
+  if (code != 200) { err = "HTTP " + String(code); http.end(); return false; }
+  int total = http.getSize();
+  if (total <= 0) { err = "unknown content length"; http.end(); return false; }
+  if (!Update.begin(total, U_FLASH)) { err = Update.errorString(); http.end(); return false; }
+  WiFiClient* stream = http.getStreamPtr();
+  uint8_t buf[1024];
+  int remaining = total;
+  unsigned long lastData = millis();
+  while (http.connected() && remaining > 0) {
+    int avail = stream->available();
+    if (avail > 0) {
+      int n = stream->readBytes(buf, min(avail, (int)sizeof(buf)));
+      if (n > 0) {
+        Update.write(buf, n);
+        remaining -= n;
+        lastData = millis();
+        g_otaBytes = (uint32_t)(total - remaining);
+        g_otaLastChunk = millis();
+      }
+    } else if (millis() - lastData > 10000) {
+      err = "download stalled"; http.end(); Update.abort(); return false;
+    } else {
+      delay(1);
+    }
+  }
+  http.end();
+  if (remaining > 0) { err = "incomplete (" + String(total - remaining) + "/" + String(total) + ")"; Update.abort(); return false; }
+  if (!Update.end(true)) { err = Update.errorString(); return false; }
+  written = total;
+  return true;
+}
+
+// The pull-and-flash itself, on its own task so it doesn't tie up the one HTTP
+// worker (TLS + a ~1.4 MB download takes several seconds). g_otaUrlMode tells
+// webLoop's stall-abort to stand down, since we -- not the upload handler -- own
+// the Update session here.
+static void githubOtaTask(void*) {
+  g_otaActive = true; g_otaUrlMode = true; g_otaBytes = 0; g_otaLastChunk = millis();
+  LatestRelease rel = fetchLatestRelease();
+  if (rel.url.isEmpty()) {
+    loge("GitHub OTA: %s", rel.err.length() ? rel.err.c_str() : "no asset URL");
+    g_otaActive = false; g_otaUrlMode = false;
+    vTaskDelete(NULL); return;
+  }
+  logi("GitHub OTA: downloading %s from %s", rel.tag.c_str(), rel.url.c_str());
+  size_t written = 0;
+  String err;
+  if (flashFirmwareFromUrl(rel.url, written, err)) {
+    logi("GitHub OTA: flashed %u bytes -- rebooting", (unsigned)written);
+    delay(1500);
+    esp_restart();
+  }
+  loge("GitHub OTA failed: %s", err.c_str());
+  g_otaActive = false; g_otaUrlMode = false;
+  vTaskDelete(NULL);
+}
+
+// GET /checkUpdate -> query GitHub for the latest release and compare to this build.
+static esp_err_t handleCheckUpdate(PsychicRequest* request, PsychicResponse* response) {
+  logi("web request for: %s\n", request->uri().c_str());
+  LatestRelease rel = fetchLatestRelease();
+  JsonDocument out;
+  out["current"]         = String(FW_VERSION);
+  out["latest"]          = rel.tag;
+  out["canInstall"]      = !rel.url.isEmpty();
+  out["updateAvailable"] = (!rel.url.isEmpty()) && isNewerVersion(rel.tag, String(FW_VERSION));
+  if (rel.err.length()) out["error"] = rel.err;
+  String s; serializeJson(out, s);
+  response->addHeader("Cache-Control", "no-store");
+  return response->send(200, "application/json", s.c_str());
+}
+
+// POST /updateFromGithub -> kick off the pull-and-flash in the background. The page
+// then shows the OTA screen and polls /restart, same as a manual .bin upload.
+static esp_err_t handleUpdateFromGithub(PsychicRequest* request, PsychicResponse* response) {
+  logi("web request for: %s\n", request->uri().c_str());
+  if (g_otaActive) return response->send(409, "text/plain", "An update is already in progress");
+  if (xTaskCreate(githubOtaTask, "GithubOTA", 16384, NULL, 5, NULL) != pdPASS)
+    return response->send(500, "text/plain", "Could not start update");
+  return response->send(200, "application/json", "{\"ok\":true}");
+}
+
+// ---------------------------------------------------------------------------
 // Setup / loop
 // ---------------------------------------------------------------------------
 
@@ -473,6 +648,8 @@ void webSetup() {
   server.on("/erase", HTTP_GET, handleErase);
   server.on("/scanWifi", HTTP_GET, handleScanWifi);
   server.on("/calibrateCenter", HTTP_GET, handleCalibrateCenter);
+  server.on("/checkUpdate", HTTP_GET, handleCheckUpdate);
+  server.on("/updateFromGithub", HTTP_POST, handleUpdateFromGithub);
 
   // OTA firmware upload
   PsychicUploadHandler* updateHandler = new PsychicUploadHandler();
@@ -518,7 +695,9 @@ void webLoop() {
   // g_otaActive would otherwise stay latched forever, wedging the display on the
   // "do not power off" screen. Detect the stall here and abort the update.
   #define OTA_STALL_MS 15000
-  if ( g_otaActive && ( millis() - g_otaLastChunk > OTA_STALL_MS ) ) {
+  // Skip during a GitHub pull-OTA: that path owns its own Update session on the OTA
+  // task and does its own stall detection; aborting it here would corrupt the flash.
+  if ( g_otaActive && !g_otaUrlMode && ( millis() - g_otaLastChunk > OTA_STALL_MS ) ) {
     logw("OTA upload stalled (%lu ms with no data); aborting", millis() - g_otaLastChunk);
     Update.abort();
     g_otaActive = false;
