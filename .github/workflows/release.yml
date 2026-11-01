@@ -1,0 +1,45 @@
+name: Build & Release
+
+# Push a semver tag (e.g. v1.2.3) and GitHub builds the firmware from that exact
+# commit and publishes it as a release. The device's "Check GitHub for updates"
+# button reads the latest release: it compares the release TAG against FW_VERSION
+# and downloads the asset named "firmware.bin". Because the build runs on the tag,
+# gen_version.py's `git describe` stamps FW_VERSION = the tag, so the published
+# image reports its own version with no hand-editing.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # needed to create the release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags so gen_version.py can `git describe` the tag
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build firmware
+        run: pio run -e esp32-poe
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          # Uploaded with its basename "firmware.bin" — exactly what fetchLatestRelease() looks for.
+          files: .pio/build/esp32-poe/firmware.bin

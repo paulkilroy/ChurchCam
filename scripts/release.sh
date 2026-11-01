@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
 #
-#  Publish a ChurchCam firmware release to GitHub so devices can self-update.
+#  Cut a ChurchCam firmware release.
 #
 #  Usage:  scripts/release.sh vX.Y.Z ["release notes"]
 #
-#  Tags the current commit, builds the firmware from that tag, and creates a GitHub
-#  Release carrying firmware.bin as an asset named "firmware.bin" -- exactly what the
-#  device's "Check GitHub for updates" button looks for. Because the build is stamped
-#  from `git describe` (scripts/gen_version.py), the released image reports its own
-#  tag as its version, and the firmware.bin left in .pio/build/ is byte-identical to
-#  the published asset: flash THAT file over USB and the local unit reports the same
-#  version as GitHub.
+#  Tags the current commit and pushes the tag. GitHub Actions (.github/workflows/
+#  release.yml) then checks out that tag, builds the firmware, and publishes a
+#  release carrying firmware.bin -- exactly what the device's "Check GitHub for
+#  updates" button looks for. Because CI builds on the tag, gen_version.py stamps
+#  FW_VERSION = the tag, so the published image reports its own version.
 #
-#  Requires the GitHub CLI (gh): https://cli.github.com  (brew install gh)
+#  No local build and no `gh` needed -- the build happens in CI. To flash the
+#  identical image over USB locally, check out the tag and run:
+#      platformio run -e esp32-poe -t upload
 #
 set -euo pipefail
 
 TAG="${1:-}"
 NOTES="${2:-Release ${TAG}}"
-ENV="esp32-poe"
-PIO="${PIO:-$HOME/.platformio/penv/bin/platformio}"
 
 if [[ -z "$TAG" ]]; then
   echo "usage: scripts/release.sh vX.Y.Z [\"release notes\"]" >&2
@@ -32,14 +30,11 @@ if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 cd "$(git rev-parse --show-toplevel)"
-BIN=".pio/build/${ENV}/firmware.bin"
 
-command -v gh >/dev/null || { echo "the GitHub CLI (gh) is required: https://cli.github.com" >&2; exit 1; }
-
-# A clean tree guarantees the built image is exactly this commit -- no "-dirty" in
-# the stamped version, and the local flash matches the published asset.
+# A clean tree means the tag points at exactly what's committed -- CI builds from
+# the tag, so whatever is uncommitted here would NOT be in the release.
 if [[ -n "$(git status --porcelain)" ]]; then
-  echo "working tree not clean -- commit or stash first (the build stamps the version from git):" >&2
+  echo "working tree not clean -- commit or stash first (CI builds from the tagged commit):" >&2
   git status --short >&2
   exit 1
 fi
@@ -49,24 +44,26 @@ if git rev-parse "$TAG" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Tag first so the build's git-describe stamp is exactly $TAG. If the build fails,
-# drop the local tag again (it hasn't been pushed yet).
+# The release workflow must exist at the tagged commit, or GitHub won't run it.
+if [[ ! -f .github/workflows/release.yml ]]; then
+  echo "warning: .github/workflows/release.yml not found at this commit --" >&2
+  echo "         CI won't build this tag. Merge the release workflow first." >&2
+fi
+
 echo ">> tagging $TAG"
 git tag -a "$TAG" -m "$NOTES"
-trap 'git tag -d "$TAG" >/dev/null 2>&1 || true' ERR
 
-echo ">> building firmware ($ENV)"
-"$PIO" run -e "$ENV"
-[[ -f "$BIN" ]] || { echo "build produced no $BIN" >&2; exit 1; }
-
-echo ">> pushing tag"
+echo ">> pushing tag (this triggers the CI build + release)"
 git push origin "$TAG"
-trap - ERR   # tag is published now; keep it even if the release step hiccups
 
-echo ">> creating GitHub release $TAG"
-gh release create "$TAG" "$BIN" --title "$TAG" --notes "$NOTES"
+REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
+SLUG="$(sed -E 's#(git@github.com:|https://github.com/)([^/]+/[^/.]+)(\.git)?#\2#' <<<"$REMOTE_URL")"
 
 echo
-echo ">> done -- $TAG is published."
-echo "   Devices will see it via 'Check GitHub for updates'."
-echo "   To flash the identical build over USB: $PIO run -e $ENV -t upload"
+echo ">> done -- $TAG pushed."
+echo "   GitHub Actions is now building and publishing the release."
+if [[ -n "$SLUG" ]]; then
+  echo "   Watch it:   https://github.com/$SLUG/actions"
+  echo "   Release:    https://github.com/$SLUG/releases/tag/$TAG"
+fi
+echo "   When it finishes, devices see it via 'Check GitHub for updates'."
